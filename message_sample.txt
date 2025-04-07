@@ -1,0 +1,175 @@
+type: HUB_EVENT_TYPE_MERGE_MESSAGE
+id: 550959473725443
+merge_message_body {
+  message {
+    data {
+      type: MESSAGE_TYPE_USER_DATA_ADD
+      fid: 940578
+      timestamp: 134511589
+      network: FARCASTER_NETWORK_MAINNET
+      user_data_body {
+        type: USER_DATA_TYPE_PFP
+        value: "https://media.firefly.land/farcaster/F65BD3C8-ACAC-47B3-A252-AE4A5ED6B8A6.png"
+      }
+    }
+    hash: "\202\022\305\300\223`\367\003U\306\370\037\311\342N,\005k\323\021"
+    hash_scheme: HASH_SCHEME_BLAKE3
+    signature: "\270\253l^\271\3663Na2\027'o\371\016x\213h\337\353\301N\370\004\035\024\027\213*\200\345\3358#P@\354\313#\260uM\231F<\371Q\007\240n\343\202\232\230\210\322\306\325\\252\266\221z\006"
+    signature_scheme: SIGNATURE_SCHEME_ED25519
+    signer: ",\013\346\033\200\375\340\021`\275\302K\377y\370\346T\335\332\003\025\370\010E\203\234L\335\321S\300""
+  }
+  deleted_messages {
+    data {
+      type: MESSAGE_TYPE_USER_DATA_ADD
+      fid: 940578
+      timestamp: 134511559
+      network: FARCASTER_NETWORK_MAINNET
+      user_data_body {
+        type: USER_DATA_TYPE_PFP
+        value: "https://media.firefly.land/farcaster/F65BD3C8-ACAC-47B3-A252-AE4A5ED6B8A6.png"
+      }
+    }
+    hash: "\337>C\206\024J\237\021\204\013\231\235Eb\273o\275u\277\211"
+    hash_scheme: HASH_SCHEME_BLAKE3
+    signature: "JY\330\274g&\035\262(\272\036o)\030\202\332\324x\314\311\030\034\302E\354\207\303\0301\340\277L\212\\005\277\264\016\251t\300_\020\251+!\027<\266\201\332]\205\207:\275\235\324\214J\245\031H\n"
+    signature_scheme: SIGNATURE_SCHEME_ED25519
+    signer: ",\013\346\033\200\375\340\021`\275\302K\377y\370\346T\335\332\003\025\370\010E\203\234L\335\321S\300""
+  }
+}
+
+type: HUB_EVENT_TYPE_MERGE_MESSAGE
+id: 550959473274880
+merge_message_body {
+  message {
+    data {
+      type: MESSAGE_TYPE_LINK_ADD
+      fid: 858884
+      timestamp: 134511589
+      network: FARCASTER_NETWORK_MAINNET
+      link_body {
+        type: "follow"
+        target_fid: 737303
+      }
+    }
+    hash: "\010\263s)K\2744\337\323v\220\250Xj\255\326\375-\222\234"
+    hash_scheme: HASH_SCHEME_BLAKE3
+    signature: "c\320\324\372\346u\340O\333\314_\371\n?<"f\340\007\360\025\257\376\2110;\037\004_s\251\314i>\370\t\342i@\307\304J\375\324<\\275\2028\254\307\222(,\247i\267#\323\245\351\307Y\002"
+    signature_scheme: SIGNATURE_SCHEME_ED25519
+    signer: "\366\035T\331\210\373`\211Z\316\016\260\022Fg\304\215-+R\244D\310W\240M,\376\337\246\033\360"
+  }
+}
+
+
+type: HUB_EVENT_TYPE_MERGE_MESSAGE
+id: 550959473238016
+merge_message_body {
+  message {
+    data {
+      type: MESSAGE_TYPE_REACTION_ADD
+      fid: 249958
+      timestamp: 134511589
+      network: FARCASTER_NETWORK_MAINNET
+      reaction_body {
+        type: REACTION_TYPE_LIKE
+        target_cast_id {
+          fid: 343324
+          hash: "\271\201\251\207\257po\3045^\315P\213S3\217\207\226\241Q"
+        }
+      }
+    }
+    hash: "\310\340\361[Y\323\272\334vSp9V$/\031F\032r\304"
+    hash_scheme: HASH_SCHEME_BLAKE3
+    signature: "\375\031\027\323!\274\t\276\264\372Z\3216\363I]\022\300\373P,\026\250_h\304\340t\352e\266\233\7\002\003$\336\317L\217% \201.\232\2537\330\260\016JH\314S\345\212z0\304\322\326\210\013"
+    signature_scheme: SIGNATURE_SCHEME_ED25519
+    signer: "\331)x\331\223(\016K\267\303\027#\206\360\240\226&Yv\364&O\207\276\224\003R\227\262\225\315:"
+  }
+}
+
+INFO:__main__:Sent event to Kafka topic: farcaster.events.other
+type: HUB_EVENT_TYPE_MERGE_MESSAGE
+id: 550959473233922
+merge_message_body {
+  message {
+    data {
+      type: MESSAGE_TYPE_REACTION_ADD
+      fid: 862811
+      timestamp: 134511590
+      network: FARCASTER_NETWORK_MAINNET
+      reaction_body {
+        type: REACTION_TYPE_RECAST
+        target_cast_id {
+          fid: 395748
+          hash: "\336\2042\326\305N\264X\206\003\034Y\036{\323\231k(\224\347"
+        }
+      }
+    }
+    hash: "\022\262\036\330\324j\223n\345.\002\375&V\252\231\347\374\202\216"
+    hash_scheme: HASH_SCHEME_BLAKE3
+    signature: "\211Uy\240\25033\257\227y\346`?\360\342-^\260=Vl-]\376\023*[;\246\374\010S+Y\022\255\353\226`\214C?\000Z\201\2021\350\010(\327\300\374\255$\304yg\317\215\317\213\317\016"
+    signature_scheme: SIGNATURE_SCHEME_ED25519
+    signer: "\274^D_<\001\353M\326^\237\326\263\021\336\346\276}\027&q\3314;\013mEZm=y\352"
+  }
+}
+
+
+
+
+INFO:__main__:Sent event to Kafka topic: farcaster.events.other
+type: HUB_EVENT_TYPE_MERGE_MESSAGE
+id: 550959473233920
+merge_message_body {
+  message {
+    data {
+      type: MESSAGE_TYPE_CAST_ADD
+      fid: 268455
+      timestamp: 134511590
+      network: FARCASTER_NETWORK_MAINNET
+      cast_add_body {
+        text: "\"i said our wills will become rich from holding in Q2\""
+        embeds {
+          url: "https://imagedelivery.net/BXluQx4ige9GuW0Ia56BHw/09409dd8-de06-424d-671f-770396c5e900/original"
+        }
+        embeds {
+          cast_id {
+            fid: 419741
+            hash: "\303j?:g\033\347\222K\336\002\316`\004\300"+\207lL"
+          }
+        }
+        parent_url: "chain://eip155:1/erc721:0xfd8427165df67df6d7fd689ae67c8ebf56d9ca61"
+      }
+    }
+    hash: "E\276\346.\310q\312\236\374g\310\341d\300\255D"IP\334"
+    hash_scheme: HASH_SCHEME_BLAKE3
+    signature: "38\310\277(\177\342U\304#g\250\273v\215n\236\237m\352\202\244>uC\355\321\306\343\3444\323\250%\004\001\037\023\206\312\236y\306\rb\250hW\007\343:\334\367\311A[\246\371\016I^\344\272\r"
+    signature_scheme: SIGNATURE_SCHEME_ED25519
+    signer: "\007\373\351\346\020\205q\243\313\351=4\360\367\226B\316}\232\232,\316\037;\331q\r\255\201\212SS"
+  }
+}
+
+
+
+INFO:__main__:Sent event to Kafka topic: farcaster.events.other
+type: HUB_EVENT_TYPE_MERGE_MESSAGE
+id: 550959470145536
+merge_message_body {
+  message {
+    data {
+      type: MESSAGE_TYPE_CAST_ADD
+      fid: 310145
+      timestamp: 134511589
+      network: FARCASTER_NETWORK_MAINNET
+      cast_add_body {
+        parent_cast_id {
+          fid: 368013
+          hash: "\303\016\237k\232.D\243C\255\200T\255U\277H\010\236\274\363"
+        }
+        text: "GM Ryan ☕🫶"
+      }
+    }
+    hash: "8>\260\302\265\260\307\232L\226b_O\300\227[\377\321\r<"
+    hash_scheme: HASH_SCHEME_BLAKE3
+    signature: "5\304w\312\235\020\003\320H\203\334\303R\325u\232\337cr=A'\000eb\253\025(\002\026\005*\000\200\021uA\270\265\351\213q\306\223\324n@\317\027'\255{\260Yxg\244v#rL\001#\010"
+    signature_scheme: SIGNATURE_SCHEME_ED25519
+    signer: "\354|\344ZE\004^X\005K)\325&\231\010\3118\177\026=\236**\323=\344\344s\355a\214?"
+  }
+}

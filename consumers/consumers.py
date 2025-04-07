@@ -78,11 +78,6 @@ class KafkaEmbedConsumer(Consumer):
             for comment in comments:
                 print(json.dumps(comment, indent=2))
 
-        # if cast_adds:
-        #     try:
-        #         asyncio.run(self.send_to_embedder(cast_adds))
-        #     except Exception as e:
-        #         logger.error("Failed to process batch with exception: %s", str(e))
 
     def consume(self):
         logger.info("Starting Kafka consumer for topic: %s", self.topic_name)
