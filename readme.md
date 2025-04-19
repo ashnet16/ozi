@@ -4,7 +4,7 @@
 
 It ingests Casts, embeds them with local LLMs, and makes them queryable via semantic search or SQL. Built to power Farcaster-native apps, dashboards, and intelligent agents.
 
-Note: This is polling from a self-hosted Hub. Also, TO DO: Ashley to post the updated design. The below design I created randomly during idea phase. 
+Note: This is polling from a self-hosted Hub. Also, TO DO: Ashley to post the updated design. The below design I created randomly during idea phase. For Analytics, I decided on duckdb for local dev.
 
 
 
