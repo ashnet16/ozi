@@ -53,6 +53,7 @@ pip install -r requirements.txt
 #### 2. Spin up Kafka
 
 ``` docker compose up -d
+
 ```
 
 #### 3. Run the Farcaster Poller
