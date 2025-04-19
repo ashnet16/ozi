@@ -12,7 +12,6 @@ Note: This is polling from a self-hosted Hub. Also, TO DO: Ashley to post the up
 
 
 
-
 ---
 
 ## ⚙️ Architecture
@@ -25,13 +24,49 @@ Note: This is polling from a self-hosted Hub. Also, TO DO: Ashley to post the up
 
 ---
 
-## 🧪 Use Cases (WIP)
+## 🧪 Use Cases & Example Queries
 
+Ozi lets you explore Farcaster activity in real-time whether you're a researcher, builder, or curious user.
+
+**Use Cases (WIP):**
 - Query Casts via natural language
 - Run custom analytics on Farcaster events
 - Build dashboards or agents over social data
 - Warpcast-integrated search and summarization
 
+---
+
+### 🧠 Ask Anything
+
+You can interact with Ozi using natural language or SQL. The LLM will translate your questions into queries against the analytics engine. The UI layer will paginate the results (top 5).
+
+**Try asking:**
+- _"Which Farcaster users mentioned “Ethereum” the most this week?"_
+- _"What are the top topics being discussed about Solana today?"_
+- _"Show me all users who cast about tariffs in the last 7 days."_
+
+**Example SQL generated:**
+
+```sql
+SELECT 
+  user_id, 
+  COUNT(*) AS cast_count
+FROM casts
+WHERE text ILIKE '%tariff%'
+  AND timestamp >= NOW() - INTERVAL '7 days'
+GROUP BY user_id
+ORDER BY cast_count DESC
+LIMIT 10;
+```
+
+**Example Analytics API Call:**
+```
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{
+        "query": "SELECT user_id, COUNT(*) AS cast_count FROM casts WHERE text ILIKE ''%tariff%'' AND timestamp >= NOW() - INTERVAL ''7 days'' GROUP BY user_id ORDER BY cast_count DESC LIMIT 10;"
+      }'
+```
 ---
 
 ## 🛠️ Project Status
