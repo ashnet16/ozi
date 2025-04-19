@@ -94,7 +94,8 @@ pip install -r requirements.txt
 
 #### 2. Spin up Kafka
 
-``` docker compose up -d
+```
+docker compose up -d
 
 ```
 
