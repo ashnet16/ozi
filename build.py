@@ -11,7 +11,7 @@ def compile_proto():
 
     for file in proto_files:
         path = os.path.join(proto_dir, file)
-        print(f"🔨 Compiling {path}...")
+        print(f"Compiling {path}...")
 
         result = subprocess.run([
             "python", "-m", "grpc_tools.protoc",

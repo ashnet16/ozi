@@ -9,8 +9,10 @@ proto:
 		-I$(PROTO_DIR) \
 		--python_out=$(PROTO_DIR) \
 		--grpc_python_out=$(PROTO_DIR) \
+		--experimental_allow_proto3_optional \
 		$(PROTO_FILES)
 	@echo "Done!"
 
 clean:
 	rm -f $(PROTO_DIR)/*_pb2.py $(PROTO_DIR)/*_pb2_grpc.py
+	@echo "Cleaned up generated files."
