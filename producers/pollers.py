@@ -72,7 +72,10 @@ class FarcasterGRPCPoller(Poller):
 class FarcasterMessageTransformer(EventTransformer):
     def transform(self):
         event_type = hub_event_pb2.HubEventType.Name(self.event.type)
-        output = {"event_type": event_type}
+        output = {
+            "event_type": event_type,
+            "schema_version": "v1"
+        }
         logger.debug("Transforming event: %s", event_type)
 
         try:
@@ -82,22 +85,26 @@ class FarcasterMessageTransformer(EventTransformer):
             ):
                 msg = self.event.merge_message_body.message
                 data = msg.data
-                msg_type = message_pb2.MessageType.Name(data.type)
-          
+                msg_type_enum = data.type
+                msg_type = message_pb2.MessageType.Name(msg_type_enum)
+
                 output.update({
                     "message_type": msg_type,
+                    "message_subtype": msg_type.replace("MESSAGE_TYPE_", ""),
                     "fid": data.fid,
                     "timestamp": data.timestamp,
+                    "message_hash": msg.hash.hex(),
+                    "raw": MessageToDict(self.event, preserving_proto_field_name=True)
                 })
 
-                if msg_type == f'{MSG_TYPE_PREFIX}_CAST_ADD':
+                if msg_type_enum == message_pb2.MessageType.MESSAGE_TYPE_CAST_ADD:
                     output["cast"] = {
                         "text": data.cast_add_body.text,
                         "mentions": list(data.cast_add_body.mentions),
                         "embeds": [e.url for e in data.cast_add_body.embeds if e.HasField("url")],
                     }
 
-                elif msg_type == f'{MSG_TYPE_PREFIX}_REACTION_ADD':
+                elif msg_type_enum == message_pb2.MessageType.MESSAGE_TYPE_REACTION_ADD:
                     body = data.reaction_body
                     output["reaction"] = {
                         "type": message_pb2.ReactionType.Name(body.type),
@@ -105,14 +112,14 @@ class FarcasterMessageTransformer(EventTransformer):
                         "target_hash": body.target_cast_id.hash.hex(),
                     }
 
-                elif msg_type == f'{MSG_TYPE_PREFIX}_LINK_ADD':
+                elif msg_type_enum == message_pb2.MessageType.MESSAGE_TYPE_LINK_ADD:
                     body = data.link_body
                     output["link"] = {
                         "type": body.type,
                         "target_fid": body.target_fid,
                     }
 
-                elif msg_type == f'{MSG_TYPE_PREFIX}_USER_DATA_ADD':
+                elif msg_type_enum == message_pb2.MessageType.MESSAGE_TYPE_USER_DATA_ADD:
                     body = data.user_data_body
                     output["user_data"] = {
                         "type": hub_event_pb2.UserDataType.Name(body.type),
@@ -122,14 +129,21 @@ class FarcasterMessageTransformer(EventTransformer):
                 else:
                     output["data"] = MessageToDict(data, preserving_proto_field_name=True)
                     output["dlq_reason"] = f"Unhandled MESSAGE_TYPE: {msg_type}"
+
             else:
-                output["raw"] = MessageToDict(self.event, preserving_proto_field_name=True)
-                output["dlq_reason"] = f"Unhandled HubEventType or missing field: {event_type}"
+                output.update({
+                    "raw": MessageToDict(self.event, preserving_proto_field_name=True),
+                    "dlq_reason": f"Unhandled HubEventType or missing field: {event_type}"
+                })
 
         except Exception as e:
-            output["error"] = f"Transformation failed: {str(e)}"
-            output["raw"] = str(self.event)
-            output["dlq_reason"] = f"Transformation error: {str(e)}"
+            logger.exception("Failed to transform Farcaster event")
+            output.update({
+                "error": f"Transformation failed: {str(e)}",
+                "raw": MessageToDict(self.event, preserving_proto_field_name=True),
+                "dlq_reason": f"Transformation error: {str(e)}"
+            })
+
         return output
 
 
