@@ -1,12 +1,13 @@
 import grpc
 import logging
 from ozi.producers.base import Poller, EventTransformer, KafkaTopic
+from ozi.producers.config import CAST_ADD_MSG, EMBEDDER_TOPIC, DLQ_TOPIC, ANALYTICS_TOPIC
 from ozi.proto import rpc_pb2_grpc, request_response_pb2, hub_event_pb2, message_pb2
 from google.protobuf.json_format import MessageToDict
 from kafka import KafkaProducer
+from langdetect import detect, LangDetectException
 import json
 
-MSG_TYPE_PREFIX = 'MESSAGE_TYPE'
 
 
 FARCASTER_SUBSCRIBE_ENDPOINT = "ec2-13-58-183-70.us-east-2.compute.amazonaws.com:2283"
@@ -40,9 +41,9 @@ class FarcasterGRPCPoller(Poller):
         super().__init__(end_point, 'farcaster_grpc')
         self.channel = grpc.insecure_channel(end_point)
         self.stub = rpc_pb2_grpc.HubServiceStub(self.channel)
-        self.topic_main = KafkaJSONTopic("farcaster.events.add")
-        self.topic_other = KafkaJSONTopic("farcaster.events.other")
-        self.topic_dlq = KafkaJSONTopic("farcaster.events.dlq")
+        self.topic_main = KafkaJSONTopic(EMBEDDER_TOPIC, topic_type=CAST_ADD_MSG)
+        self.topic_other = KafkaJSONTopic(ANALYTICS_TOPIC, topic_type="other")
+        self.topic_dlq = KafkaJSONTopic(DLQ_TOPIC, topic_type="dlq")
 
     def poll(self):
         request = request_response_pb2.SubscribeRequest(event_types=[1, 2, 3])
@@ -57,7 +58,7 @@ class FarcasterGRPCPoller(Poller):
         if event.get("dlq_reason"):
             return self.topic_dlq
         msg_type = event.get("message_type", "") 
-        if msg_type == f'{MSG_TYPE_PREFIX}_CAST_ADD':
+        if msg_type == CAST_ADD_MSG:
             return self.topic_main
         else:
             return self.topic_other
@@ -66,6 +67,7 @@ class FarcasterGRPCPoller(Poller):
         logger.info("Starting Farcaster gRPC Poller...")
         for event in self.poll():
             transformed_event = FarcasterMessageTransformer(event).transform()
+            print(transformed_event)
             self.publish(transformed_event)
 
 
@@ -98,8 +100,10 @@ class FarcasterMessageTransformer(EventTransformer):
                 })
 
                 if msg_type_enum == message_pb2.MessageType.MESSAGE_TYPE_CAST_ADD:
+                    text = data.cast_add_body.text
                     output["cast"] = {
-                        "text": data.cast_add_body.text,
+                        "text": text,
+                        "language": (lambda t: detect(t) if t and len(t) > 3 else None)(text) if text else None,
                         "mentions": list(data.cast_add_body.mentions),
                         "embeds": [e.url for e in data.cast_add_body.embeds if e.HasField("url")],
                     }

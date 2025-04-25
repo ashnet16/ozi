@@ -1,23 +1,35 @@
-version: '3.8'
+version: "3.9"
 
 services:
   ozi-api:
+    container_name: ozi-api
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ozi-api
     ports:
       - "8000:8000"
     volumes:
       - .:/app
+      - ./chroma_data:/chroma
+      - shared_data:/shared
     depends_on:
       - vector-db
     environment:
-      - VECTOR_DB_HOST=http://vector-db:8001
-      - DUCKDB_PATH=/app/data/ozi.duckdb
+      - VECTOR_DB_HOST=vector-db
+      - VECTOR_DB_PORT=8000
 
   vector-db:
     image: ghcr.io/chroma-core/chroma:latest
     container_name: vector-db
     ports:
       - "8001:8000"
+    volumes:
+      - ./chroma_data:/chroma
+      - shared_data:/shared
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+
+volumes:
+  shared_data:
+

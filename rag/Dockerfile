@@ -1,12 +1,15 @@
 FROM python:3.10-slim
 
-WORKDIR /app
+WORKDIR /api
 
-COPY . /app
+RUN apt-get update && apt-get install -y \
+    git curl build-essential g++ protobuf-compiler pkg-config libssl-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt .
+RUN pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
+
+COPY . .
 
 EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

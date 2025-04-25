@@ -102,12 +102,20 @@ docker compose up -d
 #### 3. Run the Farcaster Poller
 
 ```
-python3 -m producers.pollers
+python3 -m ozi.producers.pollers
 ```
+
+OPTIONAL: Run in the background
+
+```
+nohup python3 -m ozi.producers.pollers > pollers.log 2>&1 &
+
+```
+
 #### 4. Start the Consumer Service
 
 ```
-python3 -m consumers.consumers
+python3 -m ozi.consumers.consumers
 ```
 
 
