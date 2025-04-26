@@ -3,43 +3,89 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 import json
+import os
 
-from api.utils.chroma import get_chroma_client
+from qdrant_client import QdrantClient
+from qdrant_client.models import Filter, FieldCondition, MatchValue
+from sentence_transformers import SentenceTransformer
 
 app = FastAPI()
 
-client = get_chroma_client()
-collection = client.get_or_create_collection(name="farcaster_messages")
+# --- Setup Qdrant connection
+QDRANT_HOST = os.getenv("VECTOR_DB_HOST", "qdrant")
+QDRANT_PORT = int(os.getenv("VECTOR_DB_PORT", "6333"))
+
+client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+
+collection_name = "farcaster_casts"
+
+# --- Setup embedding model
+embed_model = SentenceTransformer("intfloat/multilingual-e5-base")
 
 
 @app.get("/health")
-def root():
+def health_check():
     return {"message": "Ozi API is up and running!"}
+
+
+@app.get("/debug")
+def debug_check():
+    count = client.count(collection_name=collection_name).count
+    scroll = client.scroll(
+        collection_name=collection_name,
+        limit=5,
+        with_payload=True
+    )
+    samples = [{"payload": point.payload} for point in scroll[0]]
+
+    return {
+        "count": count,
+        "sample": samples
+    }
 
 
 class QueryRequest(BaseModel):
     query: str
-    n_results: int = 10
+    n_results: int = 100
     language: Optional[str] = None
     is_comment: Optional[bool] = None
+    min_score: float = 0.7
 
 
 @app.post("/query")
 async def stream_query(request: QueryRequest):
-    filters = {}
-    if request.language:
-        filters["language.code"] = request.language
-    if request.is_comment is not None:
-        filters["is_comment"] = request.is_comment
+    query_vector = embed_model.encode(request.query).tolist()
 
-    results = collection.query(
-        query_texts=[request.query],
-        n_results=request.n_results,
-        where=filters or None
+    filters = []
+
+    if request.language:
+        filters.append(FieldCondition(
+            key="language",
+            match=MatchValue(value=request.language)
+        ))
+
+    if request.is_comment is not None:
+        filters.append(FieldCondition(
+            key="is_comment",
+            match=MatchValue(value=request.is_comment)
+        ))
+
+    filter_obj = Filter(must=filters) if filters else None
+
+    results = client.search(
+        collection_name=collection_name,
+        query_vector=query_vector,
+        limit=request.n_results,
+        query_filter=filter_obj,
+        with_payload=True
     )
 
     async def event_generator():
-        for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
-            yield json.dumps({"text": doc, "metadata": meta}) + "\n"
+        for hit in results:
+            if hit.score >= request.min_score:
+                yield json.dumps({
+                    "score": hit.score,
+                    "payload": hit.payload
+                }) + "\n"
 
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")

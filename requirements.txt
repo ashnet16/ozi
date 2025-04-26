@@ -31,11 +31,13 @@ Jinja2==3.1.6
 jinja2-time==0.2.0
 kafka-python==2.1.5
 keyring==25.6.0
+langdetect>=1.0.9
 make==0.1.6.post2
 MarkupSafe==3.0.2
 more-itertools==10.6.0
 msgpack==1.1.0
 multidict==6.3.2
+numpy<2
 packaging==24.2
 pbs-installer==2025.3.17
 pkginfo==1.12.1.2
@@ -50,6 +52,7 @@ python-dateutil==2.9.0.post0
 RapidFuzz==3.13.0
 requests==2.32.3
 requests-toolbelt==1.0.0
+sentence-transformers==2.6.1
 setuptools==78.1.0
 shellingham==1.5.4
 six==1.17.0
@@ -62,7 +65,3 @@ virtualenv==20.30.0
 xattr==1.1.4
 yarl==1.19.0
 zstandard==0.23.0
-langdetect>=1.0.9
-sentence-transformers==2.6.1
-numpy<2
-

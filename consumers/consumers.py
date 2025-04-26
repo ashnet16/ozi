@@ -1,12 +1,15 @@
 import json
 import logging
 import re
+import uuid
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
 from datetime import datetime
 from sentence_transformers import SentenceTransformer
-from chromadb import HttpClient
+from qdrant_client import QdrantClient
+from qdrant_client.models import VectorParams, Distance, PointStruct
 import emoji
+import os
 
 from ozi.consumers.base import Consumer
 from ozi.consumers.config import CAST_ADD_MSG, EMBEDDER_TOPIC, BATCH_SIZE
@@ -27,8 +30,6 @@ def set_defaults(record):
     """Ensure all metadata values are str, int, float, or bool (no NoneType)"""
     safe_record = {}
     for k, v in record.items():
-        if k == "text":
-            continue
         if v is None:
             safe_record[k] = ""
         elif isinstance(v, (str, int, float, bool)):
@@ -38,7 +39,7 @@ def set_defaults(record):
         elif isinstance(v, dict):
             safe_record[k] = json.dumps(v)
         else:
-            safe_record[k] = str(v)  # fallback for unknown types
+            safe_record[k] = str(v)
     return safe_record
 
 class KafkaEmbedConsumer(Consumer):
@@ -54,8 +55,20 @@ class KafkaEmbedConsumer(Consumer):
             auto_offset_reset="earliest"
         )
         self.embed_model = SentenceTransformer("intfloat/multilingual-e5-base")
-        self.chroma = HttpClient(host="http://localhost:8001")
-        self.collection = self.chroma.get_or_create_collection(name="farcaster_casts")
+        self.qdrant = QdrantClient(host="localhost", port=6333)
+
+        self.collection_name = "farcaster_casts"
+        self.ensure_collection_exists()
+
+    def ensure_collection_exists(self):
+        try:
+            self.qdrant.recreate_collection(
+                collection_name=self.collection_name,
+                vectors_config=VectorParams(size=768, distance=Distance.COSINE),
+            )
+            logger.info("Collection %s created.", self.collection_name)
+        except Exception as e:
+            logger.warning("Collection %s may already exist: %s", self.collection_name, str(e))
 
     def process(self, messages):
         records = []
@@ -95,6 +108,7 @@ class KafkaEmbedConsumer(Consumer):
                         "message_hash": message_hash,
                         "consumer_ts": timestamp,
                         "is_comment": is_comment,
+                        "vector_id": str(uuid.uuid4()),
                     }
 
                     if isinstance(parent_cast, dict):
@@ -107,17 +121,35 @@ class KafkaEmbedConsumer(Consumer):
 
         return records
 
-    def write_to_chroma(self, records):
+    def write_to_qdrant(self, records):
         texts = [r["text"] for r in records]
-        metadatas = [set_defaults(r) for r in records]
-        ids = [r["message_hash"] for r in records]
+        metadatas = []
+        for r in records:
+            metadata = set_defaults(r)
+            metadata["text"] = r["text"]
+            metadatas.append(metadata)
+
+        ids = [r["vector_id"] for r in records]
 
         try:
             vectors = self.embed_model.encode(texts, batch_size=BATCH_SIZE, show_progress_bar=False).tolist()
-            self.collection.add(documents=texts, embeddings=vectors, metadatas=metadatas, ids=ids)
-            logger.info("Wrote %d embeddings to Chroma.", len(texts))
+
+            points = [
+                PointStruct(
+                    id=ids[i],
+                    vector=vectors[i],
+                    payload=metadatas[i]
+                ) for i in range(len(vectors))
+            ]
+
+            self.qdrant.upsert(
+                collection_name=self.collection_name,
+                points=points
+            )
+
+            logger.info("Wrote %d embeddings to Qdrant.", len(texts))
         except Exception as e:
-            logger.error("Failed to write to Chroma: %s", str(e))
+            logger.error("Failed to write to Qdrant: %s", str(e))
 
     def consume(self):
         logger.info("Starting Kafka consumer for topic: %s", self.topic_name)
@@ -129,7 +161,7 @@ class KafkaEmbedConsumer(Consumer):
                 if len(buffer) >= BATCH_SIZE:
                     records = self.process(buffer)
                     if records:
-                        self.write_to_chroma(records)
+                        self.write_to_qdrant(records)
                     buffer = []
             except KafkaError as e:
                 logger.error("Kafka error while consuming message: %s", str(e))
@@ -140,6 +172,6 @@ class KafkaAnalyticsConsumer(Consumer):
     pass
 
 if __name__ == "__main__":
-    embedder_hosts = ["localhost:8000"]
+    embedder_hosts = ["localhost:6333"]
     consumer = KafkaEmbedConsumer(embedder_hosts, topic_name=EMBEDDER_TOPIC)
     consumer.consume()

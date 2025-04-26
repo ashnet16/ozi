@@ -112,10 +112,24 @@ nohup python3 -m ozi.producers.pollers > pollers.log 2>&1 &
 
 ```
 
-#### 4. Start the Consumer Service
+#### 4. Start the Ozi API and databases 
+
+```
+docker-compose up -d
+
+```
+
+#### 5. Start the Consumer Service
 
 ```
 python3 -m ozi.consumers.consumers
+
+```
+
+OPTIONAL: Run in the background
+
+```
+nohup python3 -m ozi.consumers.consumers > consumers.log 2>&1 &
 ```
 
 
