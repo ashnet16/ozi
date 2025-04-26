@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+
 class Poller(ABC):
 
     def __init__(self, end_point, producer=None):
@@ -15,7 +16,6 @@ class Poller(ABC):
         pass
 
 
-
 class EventTransformer(ABC):
     def __init__(self, event):
         self.event = event
@@ -29,7 +29,7 @@ class KafkaTopic(ABC):
     def __init__(self, topic_name, topic_type=None):
         self.topic_name = topic_name
         self.topic_type = topic_type
-        
+
     @abstractmethod
     def produce(self, event, topic_name):
         pass

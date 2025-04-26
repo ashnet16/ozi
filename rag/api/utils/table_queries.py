@@ -9,6 +9,7 @@ def create_cast_adds_table():
     );
     """
 
+
 def create_cast_comments_table():
     return """
     CREATE TABLE IF NOT EXISTS cast_comments (
@@ -19,6 +20,7 @@ def create_cast_comments_table():
         consumer_ts TIMESTAMP
     );
     """
+
 
 def create_cast_reactions_table():
     return """

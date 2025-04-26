@@ -13,12 +13,34 @@ protobuf = ">=4.25.1"
 kafka-python = ">=2.0.2"
 httpx = ">=0.26.0"
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.poetry.group.dev.dependencies]
+black = "*"
+isort = "*"
+flake8 = "*"
+mypy = "*"
+pytest = "*"
+pre-commit = "*"
 
 [tool.poetry.scripts]
 grpc-poll = "producers.pollers:FarcasterGRPCPoller.run"
 
-[tool.poetry.extras]
-dev = ["black", "pytest"]
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# Formatting + Linting Configs
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.isort]
+profile = "black"
+
+[tool.flake8]
+max-line-length = 9999
+extend-ignore = ["E203", "W503", "E501"]
+exclude = ["proto/"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true

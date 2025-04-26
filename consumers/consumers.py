@@ -2,22 +2,23 @@ import json
 import logging
 import re
 import uuid
+from datetime import datetime
+
+import emoji
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
-from datetime import datetime
-from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
-from qdrant_client.models import VectorParams, Distance, PointStruct
-import emoji
-import os
+from qdrant_client.models import Distance, PointStruct, VectorParams
+from sentence_transformers import SentenceTransformer
 
 from ozi.consumers.base import Consumer
-from ozi.consumers.config import CAST_ADD_MSG, EMBEDDER_TOPIC, BATCH_SIZE
+from ozi.consumers.config import BATCH_SIZE, CAST_ADD_MSG, EMBEDDER_TOPIC
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 URL_REGEX = re.compile(r"http\S+|www\.\S+")
+
 
 def normalize_cast(text):
     if not text:
@@ -25,6 +26,7 @@ def normalize_cast(text):
     text = emoji.demojize(text, delimiters=(":", ":"))
     text = re.sub(URL_REGEX, "", text)
     return text.strip().lower()
+
 
 def set_defaults(record):
     """Ensure all metadata values are str, int, float, or bool (no NoneType)"""
@@ -42,9 +44,12 @@ def set_defaults(record):
             safe_record[k] = str(v)
     return safe_record
 
+
 class KafkaEmbedConsumer(Consumer):
     def __init__(self, embedder_hosts, topic_name, group_id="ozi-embed-consumer-group"):
-        super().__init__(end_point=embedder_hosts[0], topic_name=topic_name, consumer_group=group_id)
+        super().__init__(
+            end_point=embedder_hosts[0], topic_name=topic_name, consumer_group=group_id
+        )
 
         self.consumer = KafkaConsumer(
             topic_name,
@@ -52,7 +57,7 @@ class KafkaEmbedConsumer(Consumer):
             group_id=group_id,
             value_deserializer=lambda m: json.loads(m.decode("utf-8")),
             enable_auto_commit=True,
-            auto_offset_reset="earliest"
+            auto_offset_reset="earliest",
         )
         self.embed_model = SentenceTransformer("intfloat/multilingual-e5-base")
         self.qdrant = QdrantClient(host="localhost", port=6333)
@@ -68,7 +73,9 @@ class KafkaEmbedConsumer(Consumer):
             )
             logger.info("Collection %s created.", self.collection_name)
         except Exception as e:
-            logger.warning("Collection %s may already exist: %s", self.collection_name, str(e))
+            logger.warning(
+                "Collection %s may already exist: %s", self.collection_name, str(e)
+            )
 
     def process(self, messages):
         records = []
@@ -132,20 +139,16 @@ class KafkaEmbedConsumer(Consumer):
         ids = [r["vector_id"] for r in records]
 
         try:
-            vectors = self.embed_model.encode(texts, batch_size=BATCH_SIZE, show_progress_bar=False).tolist()
+            vectors = self.embed_model.encode(
+                texts, batch_size=BATCH_SIZE, show_progress_bar=False
+            ).tolist()
 
             points = [
-                PointStruct(
-                    id=ids[i],
-                    vector=vectors[i],
-                    payload=metadatas[i]
-                ) for i in range(len(vectors))
+                PointStruct(id=ids[i], vector=vectors[i], payload=metadatas[i])
+                for i in range(len(vectors))
             ]
 
-            self.qdrant.upsert(
-                collection_name=self.collection_name,
-                points=points
-            )
+            self.qdrant.upsert(collection_name=self.collection_name, points=points)
 
             logger.info("Wrote %d embeddings to Qdrant.", len(texts))
         except Exception as e:
@@ -168,8 +171,10 @@ class KafkaEmbedConsumer(Consumer):
             except Exception as e:
                 logger.error("Unexpected error while consuming message: %s", str(e))
 
+
 class KafkaAnalyticsConsumer(Consumer):
     pass
+
 
 if __name__ == "__main__":
     embedder_hosts = ["localhost:6333"]

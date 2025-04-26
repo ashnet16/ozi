@@ -1,14 +1,19 @@
-import grpc
+import json
 import logging
-from ozi.producers.base import Poller, EventTransformer, KafkaTopic
-from ozi.producers.config import CAST_ADD_MSG, EMBEDDER_TOPIC, DLQ_TOPIC, ANALYTICS_TOPIC
-from ozi.proto import rpc_pb2_grpc, request_response_pb2, hub_event_pb2, message_pb2
+
+import grpc
 from google.protobuf.json_format import MessageToDict
 from kafka import KafkaProducer
-from langdetect import detect, LangDetectException
-import json
+from langdetect import detect
 
-
+from ozi.producers.base import EventTransformer, KafkaTopic, Poller
+from ozi.producers.config import (
+    ANALYTICS_TOPIC,
+    CAST_ADD_MSG,
+    DLQ_TOPIC,
+    EMBEDDER_TOPIC,
+)
+from ozi.proto import hub_event_pb2, message_pb2, request_response_pb2, rpc_pb2_grpc
 
 FARCASTER_SUBSCRIBE_ENDPOINT = "ec2-13-58-183-70.us-east-2.compute.amazonaws.com:2283"
 
@@ -17,13 +22,15 @@ logging.basicConfig(level=logging.INFO)
 
 
 class KafkaJSONTopic(KafkaTopic):
-    def __init__(self, topic_name, bootstrap_servers="localhost:29092", topic_type=None):
+    def __init__(
+        self, topic_name, bootstrap_servers="localhost:29092", topic_type=None
+    ):
         super().__init__(topic_name, topic_type)
         self.producer = KafkaProducer(
             bootstrap_servers=[bootstrap_servers],
             value_serializer=lambda v: json.dumps(v).encode("utf-8"),
             linger_ms=100,
-            batch_size=16384
+            batch_size=16384,
         )
 
     def produce(self, event, topic_name=None):
@@ -38,7 +45,7 @@ class KafkaJSONTopic(KafkaTopic):
 
 class FarcasterGRPCPoller(Poller):
     def __init__(self, end_point=FARCASTER_SUBSCRIBE_ENDPOINT):
-        super().__init__(end_point, 'farcaster_grpc')
+        super().__init__(end_point, "farcaster_grpc")
         self.channel = grpc.insecure_channel(end_point)
         self.stub = rpc_pb2_grpc.HubServiceStub(self.channel)
         self.topic_main = KafkaJSONTopic(EMBEDDER_TOPIC, topic_type=CAST_ADD_MSG)
@@ -57,7 +64,7 @@ class FarcasterGRPCPoller(Poller):
     def _select_topic(self, event):
         if event.get("dlq_reason"):
             return self.topic_dlq
-        msg_type = event.get("message_type", "") 
+        msg_type = event.get("message_type", "")
         if msg_type == CAST_ADD_MSG:
             return self.topic_main
         else:
@@ -74,38 +81,47 @@ class FarcasterGRPCPoller(Poller):
 class FarcasterMessageTransformer(EventTransformer):
     def transform(self):
         event_type = hub_event_pb2.HubEventType.Name(self.event.type)
-        output = {
-            "event_type": event_type,
-            "schema_version": "v1"
-        }
+        output = {"event_type": event_type, "schema_version": "v1"}
         logger.debug("Transforming event: %s", event_type)
 
         try:
             if (
-                self.event.type == hub_event_pb2.HUB_EVENT_TYPE_MERGE_MESSAGE and
-                self.event.HasField("merge_message_body")
+                self.event.type == hub_event_pb2.HUB_EVENT_TYPE_MERGE_MESSAGE
+                and self.event.HasField("merge_message_body")
             ):
                 msg = self.event.merge_message_body.message
                 data = msg.data
                 msg_type_enum = data.type
                 msg_type = message_pb2.MessageType.Name(msg_type_enum)
 
-                output.update({
-                    "message_type": msg_type,
-                    "message_subtype": msg_type.replace("MESSAGE_TYPE_", ""),
-                    "fid": data.fid,
-                    "timestamp": data.timestamp,
-                    "message_hash": msg.hash.hex(),
-                    "raw": MessageToDict(self.event, preserving_proto_field_name=True)
-                })
+                output.update(
+                    {
+                        "message_type": msg_type,
+                        "message_subtype": msg_type.replace("MESSAGE_TYPE_", ""),
+                        "fid": data.fid,
+                        "timestamp": data.timestamp,
+                        "message_hash": msg.hash.hex(),
+                        "raw": MessageToDict(
+                            self.event, preserving_proto_field_name=True
+                        ),
+                    }
+                )
 
                 if msg_type_enum == message_pb2.MessageType.MESSAGE_TYPE_CAST_ADD:
                     text = data.cast_add_body.text
                     output["cast"] = {
                         "text": text,
-                        "language": (lambda t: detect(t) if t and len(t) > 3 else None)(text) if text else None,
+                        "language": (
+                            (lambda t: detect(t) if t and len(t) > 3 else None)(text)
+                            if text
+                            else None
+                        ),
                         "mentions": list(data.cast_add_body.mentions),
-                        "embeds": [e.url for e in data.cast_add_body.embeds if e.HasField("url")],
+                        "embeds": [
+                            e.url
+                            for e in data.cast_add_body.embeds
+                            if e.HasField("url")
+                        ],
                     }
 
                 elif msg_type_enum == message_pb2.MessageType.MESSAGE_TYPE_REACTION_ADD:
@@ -123,7 +139,9 @@ class FarcasterMessageTransformer(EventTransformer):
                         "target_fid": body.target_fid,
                     }
 
-                elif msg_type_enum == message_pb2.MessageType.MESSAGE_TYPE_USER_DATA_ADD:
+                elif (
+                    msg_type_enum == message_pb2.MessageType.MESSAGE_TYPE_USER_DATA_ADD
+                ):
                     body = data.user_data_body
                     output["user_data"] = {
                         "type": hub_event_pb2.UserDataType.Name(body.type),
@@ -131,22 +149,30 @@ class FarcasterMessageTransformer(EventTransformer):
                     }
 
                 else:
-                    output["data"] = MessageToDict(data, preserving_proto_field_name=True)
+                    output["data"] = MessageToDict(
+                        data, preserving_proto_field_name=True
+                    )
                     output["dlq_reason"] = f"Unhandled MESSAGE_TYPE: {msg_type}"
 
             else:
-                output.update({
-                    "raw": MessageToDict(self.event, preserving_proto_field_name=True),
-                    "dlq_reason": f"Unhandled HubEventType or missing field: {event_type}"
-                })
+                output.update(
+                    {
+                        "raw": MessageToDict(
+                            self.event, preserving_proto_field_name=True
+                        ),
+                        "dlq_reason": f"Unhandled HubEventType or missing field: {event_type}",
+                    }
+                )
 
         except Exception as e:
             logger.exception("Failed to transform Farcaster event")
-            output.update({
-                "error": f"Transformation failed: {str(e)}",
-                "raw": MessageToDict(self.event, preserving_proto_field_name=True),
-                "dlq_reason": f"Transformation error: {str(e)}"
-            })
+            output.update(
+                {
+                    "error": f"Transformation failed: {str(e)}",
+                    "raw": MessageToDict(self.event, preserving_proto_field_name=True),
+                    "dlq_reason": f"Transformation error: {str(e)}",
+                }
+            )
 
         return output
 

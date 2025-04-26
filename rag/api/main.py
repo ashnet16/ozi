@@ -1,12 +1,12 @@
+import json
+import os
+from typing import Optional
+
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional
-import json
-import os
-
 from qdrant_client import QdrantClient
-from qdrant_client.models import Filter, FieldCondition, MatchValue
+from qdrant_client.models import FieldCondition, Filter, MatchValue
 from sentence_transformers import SentenceTransformer
 
 app = FastAPI()
@@ -31,17 +31,10 @@ def health_check():
 @app.get("/debug")
 def debug_check():
     count = client.count(collection_name=collection_name).count
-    scroll = client.scroll(
-        collection_name=collection_name,
-        limit=5,
-        with_payload=True
-    )
+    scroll = client.scroll(collection_name=collection_name, limit=5, with_payload=True)
     samples = [{"payload": point.payload} for point in scroll[0]]
 
-    return {
-        "count": count,
-        "sample": samples
-    }
+    return {"count": count, "sample": samples}
 
 
 class QueryRequest(BaseModel):
@@ -59,16 +52,14 @@ async def stream_query(request: QueryRequest):
     filters = []
 
     if request.language:
-        filters.append(FieldCondition(
-            key="language",
-            match=MatchValue(value=request.language)
-        ))
+        filters.append(
+            FieldCondition(key="language", match=MatchValue(value=request.language))
+        )
 
     if request.is_comment is not None:
-        filters.append(FieldCondition(
-            key="is_comment",
-            match=MatchValue(value=request.is_comment)
-        ))
+        filters.append(
+            FieldCondition(key="is_comment", match=MatchValue(value=request.is_comment))
+        )
 
     filter_obj = Filter(must=filters) if filters else None
 
@@ -77,15 +68,12 @@ async def stream_query(request: QueryRequest):
         query_vector=query_vector,
         limit=request.n_results,
         query_filter=filter_obj,
-        with_payload=True
+        with_payload=True,
     )
 
     async def event_generator():
         for hit in results:
             if hit.score >= request.min_score:
-                yield json.dumps({
-                    "score": hit.score,
-                    "payload": hit.payload
-                }) + "\n"
+                yield json.dumps({"score": hit.score, "payload": hit.payload}) + "\n"
 
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")
