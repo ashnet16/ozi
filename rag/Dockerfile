@@ -1,15 +1,16 @@
 FROM python:3.10-slim
 
-WORKDIR /api
-
-RUN apt-get update && apt-get install -y \
-    git curl build-essential g++ protobuf-compiler pkg-config libssl-dev \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+WORKDIR /app/rag
 
 COPY requirements.txt .
-RUN pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
+
+RUN pip install --upgrade pip setuptools wheel \
+ && pip install -r requirements.txt
 
 COPY . .
 
+ENV PYTHONPATH=/app/rag
+
 EXPOSE 8000
+
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

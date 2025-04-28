@@ -1,4 +1,5 @@
 import re
+import duckdb
 
 DANGEROUS_KEYWORDS = [
     "DROP",
@@ -20,4 +21,18 @@ def validate_safe_sql(sql_query: str) -> None:
     for keyword in DANGEROUS_KEYWORDS:
         if re.search(rf"\b{keyword}\b", sql_upper):
             raise ValueError(f"Unsafe SQL: detected dangerous keyword '{keyword}'.")
+
+
+
+def validate_sql_query(sql_query: str) -> None:
+
+    validate_safe_sql(sql_query)
+    try:
+        conn = duckdb.connect("duckdb_data/ozi.duckdb")
+        conn.execute("BEGIN TRANSACTION;")
+        conn.execute(sql_query)
+        conn.execute("ROLLBACK;")
+        conn.close()
+    except Exception as e:
+        raise ValueError(f"Invalid SQL query: {e}")
 

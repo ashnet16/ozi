@@ -15,8 +15,13 @@ async def search_vector(request):
     query_vector = embed_model.encode(request.query).tolist()
 
     filters = []
+
+    if request.fid:
+        filters.append(FieldCondition(key="fid", match=MatchValue(value=request.fid)))
+
     if request.language:
         filters.append(FieldCondition(key="language", match=MatchValue(value=request.language)))
+
     if request.is_comment is not None:
         filters.append(FieldCondition(key="is_comment", match=MatchValue(value=request.is_comment)))
 

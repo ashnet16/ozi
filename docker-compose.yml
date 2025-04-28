@@ -1,4 +1,4 @@
-version: "3.8"
+version: "3.9"
 
 services:
   zookeeper:
@@ -25,10 +25,21 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
+  qdrant:
+    image: qdrant/qdrant
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HOST=0.0.0.0
+
   consumer:
     build:
       context: .
       dockerfile: analytics/Dockerfile
+    container_name: consumer
     environment:
       - KAFKA_BOOTSTRAP_SERVER=kafka:29092
     depends_on:
@@ -36,3 +47,23 @@ services:
     volumes:
       - ./duckdb_data:/app/duckdb_data
     command: python -m consumer
+
+  ozi-api:
+    build:
+      context: ./rag
+      dockerfile: Dockerfile
+    container_name: ozi-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./rag:/api
+    depends_on:
+      - qdrant
+    environment:
+      - VECTOR_DB_HOST=qdrant
+      - VECTOR_DB_PORT=6333
+      - OPENAI_API_KEY=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
+
+volumes:
+  shared_data:
+  qdrant_storage:
