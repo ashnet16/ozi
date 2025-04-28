@@ -5,15 +5,11 @@ def create_casts_table():
         msg_type TEXT,
         fid BIGINT,
         msg_timestamp TIMESTAMP,
-        network TEXT,
-        parent_fid BIGINT,
-        parent_hash TEXT,
         text TEXT,
         lang TEXT,
         embeds TEXT,
-        hash TEXT,
-        signature TEXT,
-        signer TEXT
+        mentions TEXT,
+        msg_hash TEXT
     );
     """
 
@@ -24,15 +20,12 @@ def create_comments_table():
         msg_type TEXT,
         fid BIGINT,
         msg_timestamp TIMESTAMP,
-        network TEXT,
         parent_fid BIGINT,
         parent_hash TEXT,
         text TEXT,
         lang TEXT,
         embeds TEXT,
-        hash TEXT,
-        signature TEXT,
-        signer TEXT
+        msg_hash TEXT
     );
     """
 
@@ -44,12 +37,9 @@ def create_reactions_table():
         msg_type TEXT,
         fid BIGINT,
         msg_timestamp TIMESTAMP,
-        network TEXT,
         reaction_type TEXT,
         target_fid BIGINT,
         target_hash TEXT,
-        hash TEXT,
-        signature TEXT,
-        signer TEXT
+        msg_hash TEXT
     );
     """

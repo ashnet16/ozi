@@ -46,20 +46,19 @@ def set_defaults(record):
 
 
 class KafkaEmbedConsumer(Consumer):
-    def __init__(self, embedder_hosts, topics, group_id="ozi-embed-consumer-group"):
+    def __init__(self, embedder_hosts, topic_name, group_id="ozi-embed-consumer-group"):
         super().__init__(
-            end_point=embedder_hosts[0], topics=topics, consumer_group=group_id
+            end_point=embedder_hosts[0], topic_name=topic_name, consumer_group=group_id
         )
 
         self.consumer = KafkaConsumer(
-            *self.topics,  # Spread list into multiple topic arguments
+            topic_name,
             bootstrap_servers=["localhost:29092"],
             group_id=group_id,
             value_deserializer=lambda m: json.loads(m.decode("utf-8")),
             enable_auto_commit=True,
             auto_offset_reset="earliest",
         )
-
         self.embed_model = SentenceTransformer("intfloat/multilingual-e5-base")
         self.qdrant = QdrantClient(host="localhost", port=6333)
 
@@ -156,7 +155,7 @@ class KafkaEmbedConsumer(Consumer):
             logger.error("Failed to write to Qdrant: %s", str(e))
 
     def consume(self):
-        logger.info("Starting Kafka consumer for topics: %s", self.topics)
+        logger.info("Starting Kafka consumer for topic: %s", self.topic_name)
         buffer = []
 
         for message in self.consumer:
@@ -173,7 +172,8 @@ class KafkaEmbedConsumer(Consumer):
                 logger.error("Unexpected error while consuming message: %s", str(e))
 
 
+
 if __name__ == "__main__":
     embedder_hosts = ["localhost:6333"]
-    consumer = KafkaEmbedConsumer(embedder_hosts, topics=[EMBEDDER_TOPIC])
+    consumer = KafkaEmbedConsumer(embedder_hosts, topic_name=EMBEDDER_TOPIC)
     consumer.consume()
