@@ -1,6 +1,5 @@
 import json
 import logging
-
 import grpc
 from google.protobuf.json_format import MessageToDict
 from kafka import KafkaProducer
@@ -23,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 
 class KafkaJSONTopic(KafkaTopic):
     def __init__(
-        self, topic_name, bootstrap_servers="localhost:29092", topic_type=None
+        self, topic_name, bootstrap_servers="localhost:9092", topic_type=None
     ):
         super().__init__(topic_name, topic_type)
         self.producer = KafkaProducer(

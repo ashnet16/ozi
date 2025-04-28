@@ -1,79 +1,46 @@
-import json
-import os
-from typing import Optional
-
 from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from qdrant_client import QdrantClient
-from qdrant_client.models import FieldCondition, Filter, MatchValue
-from sentence_transformers import SentenceTransformer
+from models import QueryRequest
+from services.search import search_vector
+from services.query import run_sql, stream_full_query
+from utils.llm_prompts import classify_query, generate_sql_from_query
+
+from llm.factory import LLMFactory
+from llm.chatgpt.connection import ChatGPTConnectionInfo
+from utils.sql_validator import validate_safe_sql
+import os
 
 app = FastAPI()
 
-# --- Setup Qdrant connection
-QDRANT_HOST = os.getenv("VECTOR_DB_HOST", "qdrant")
-QDRANT_PORT = int(os.getenv("VECTOR_DB_PORT", "6333"))
-
-client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
-
-collection_name = "farcaster_casts"
-
-# --- Setup embedding model
-embed_model = SentenceTransformer("intfloat/multilingual-e5-base")
+connection_info = ChatGPTConnectionInfo(api_key=os.getenv("OPENAI_API_KEY"))
+llm_client = LLMFactory.create(provider="chatgpt", connection_info=connection_info)
 
 
-@app.get("/health")
-def health_check():
-    return {"message": "Ozi API is up and running!"}
+@app.post("/search")
+async def search_router(request: QueryRequest):
+    classification = await classify_query(llm_client, request.query)
+
+    if classification == "semantic":
+        return await search_vector(request)
+
+    elif classification == "analytic":
+        sql_code = await generate_sql_from_query(llm_client, request.query)
 
 
-@app.get("/debug")
-def debug_check():
-    count = client.count(collection_name=collection_name).count
-    scroll = client.scroll(collection_name=collection_name, limit=5, with_payload=True)
-    samples = [{"payload": point.payload} for point in scroll[0]]
+        validate_safe_sql(sql_code)
 
-    return {"count": count, "sample": samples}
+        results = await run_sql(sql_code)
+        short_results = results[:100]
 
-
-class QueryRequest(BaseModel):
-    query: str
-    n_results: int = 100
-    language: Optional[str] = None
-    is_comment: Optional[bool] = None
-    min_score: float = 0.7
+        return {
+            "query": request.query,
+            "classification": "analytic",
+            "sql": sql_code,
+            "sample_results": short_results,
+            "full_results_link": f"/query?original_query={request.query}"
+        }
 
 
-@app.post("/query")
-async def stream_query(request: QueryRequest):
-    query_vector = embed_model.encode(request.query).tolist()
-
-    filters = []
-
-    if request.language:
-        filters.append(
-            FieldCondition(key="language", match=MatchValue(value=request.language))
-        )
-
-    if request.is_comment is not None:
-        filters.append(
-            FieldCondition(key="is_comment", match=MatchValue(value=request.is_comment))
-        )
-
-    filter_obj = Filter(must=filters) if filters else None
-
-    results = client.search(
-        collection_name=collection_name,
-        query_vector=query_vector,
-        limit=request.n_results,
-        query_filter=filter_obj,
-        with_payload=True,
-    )
-
-    async def event_generator():
-        for hit in results:
-            if hit.score >= request.min_score:
-                yield json.dumps({"score": hit.score, "payload": hit.payload}) + "\n"
-
-    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
+@app.get("/query")
+async def query_full(original_query: str):
+    sql_code = await generate_sql_from_query(llm_client, original_query)
+    return await stream_full_query(sql_code)
