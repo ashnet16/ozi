@@ -85,7 +85,6 @@ Ozi's data ingestion and analytics pipeline is designed to prioritize:
 ---
 ## ⚡ Data Flow
 
-```plaintext
 Kafka Producer → Kafka Topic (casts/comments/reactions)
 Kafka Consumer → Writes to DuckDB + Vector DB
 FastAPI → /search → LLM classifies → (Semantic search OR SQL generation)
