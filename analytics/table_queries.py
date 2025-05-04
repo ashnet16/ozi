@@ -4,7 +4,7 @@ def create_casts_table():
         id BIGINT PRIMARY KEY,
         msg_type TEXT,
         fid BIGINT,
-        msg_timestamp TIMESTAMP,
+        msg_timestamp TIMESTAMP WITH TIME ZONE,
         text TEXT,
         lang TEXT,
         embeds TEXT,
@@ -19,7 +19,7 @@ def create_comments_table():
         id BIGINT PRIMARY KEY,
         msg_type TEXT,
         fid BIGINT,
-        msg_timestamp TIMESTAMP,
+        msg_timestamp TIMESTAMP WITH TIME ZONE,
         parent_fid BIGINT,
         parent_hash TEXT,
         text TEXT,
@@ -29,14 +29,13 @@ def create_comments_table():
     );
     """
 
-
 def create_reactions_table():
     return """
     CREATE TABLE IF NOT EXISTS reactions (
         id BIGINT PRIMARY KEY,
         msg_type TEXT,
         fid BIGINT,
-        msg_timestamp TIMESTAMP,
+        msg_timestamp TIMESTAMP WITH TIME ZONE,
         reaction_type TEXT,
         target_fid BIGINT,
         target_hash TEXT,

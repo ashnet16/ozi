@@ -18,12 +18,25 @@ services:
     depends_on:
       - zookeeper
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_HOST://kafka:29092
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        KAFKA_BROKER_ID: 1
+        KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,DOCKER:PLAINTEXT
+        KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,DOCKER://kafka:29092
+        KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,DOCKER://0.0.0.0:29092
+        KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  postgres:
+    image: postgres:15
+    container_name: ozi-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ozi
+      POSTGRES_USER: ozi_user
+      POSTGRES_PASSWORD: ozi_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
 
   qdrant:
     image: qdrant/qdrant
@@ -39,31 +52,41 @@ services:
     build:
       context: .
       dockerfile: analytics/Dockerfile
-    container_name: consumer
+    container_name: analytics-consumer
     environment:
       - KAFKA_BOOTSTRAP_SERVER=kafka:29092
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=ozi
+      - POSTGRES_USER=ozi_user
+      - POSTGRES_PASSWORD=ozi_pass
     depends_on:
       - kafka
+      - postgres
     volumes:
-      - ./duckdb_data:/app/duckdb_data
+      - ./analytics:/app/analytics
     command: python -m consumer
 
   ozi-api:
     build:
-      context: ./rag
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: rag/Dockerfile
     container_name: ozi-api
     ports:
       - "8000:8000"
-    volumes:
-      - ./rag:/api
-    depends_on:
-      - qdrant
     environment:
       - VECTOR_DB_HOST=qdrant
       - VECTOR_DB_PORT=6333
-      - OPENAI_API_KEY=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
+      - OPENAI_API_KEY=<KEY_HERE>
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=ozi
+      - POSTGRES_USER=ozi_user
+      - POSTGRES_PASSWORD=ozi_pass
+    depends_on:
+      - qdrant
+      - postgres
+    volumes:
+      - ./rag:/app/rag
 
 volumes:
-  shared_data:
   qdrant_storage:
+  postgres_data:

@@ -1,7 +1,8 @@
-import duckdb
-import logging
+import os
 import json
-from datetime import datetime
+import logging
+import psycopg2
+from datetime import datetime, timezone, timedelta
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
 
@@ -12,13 +13,20 @@ from table_queries import create_casts_table, create_comments_table, create_reac
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+FARCASTER_EPOCH = datetime(2021, 10, 1, tzinfo=timezone.utc)
+
+
+def to_pg_ts(farcaster_ts: int) -> datetime:
+    try:
+        return FARCASTER_EPOCH + timedelta(seconds=int(farcaster_ts))
+    except Exception:
+        return datetime.now(timezone.utc)
+
+
 class KafkaAnalyticsConsumer(Consumer):
     def __init__(self, topics=[ANALYTICS_TOPIC], group_id="ozi-analytics-consumer-group"):
-        super().__init__(
-            end_point="kafka:29092", topic_name=topics, consumer_group=group_id
-        )
+        super().__init__(end_point="kafka:29092", topics=topics, consumer_group=group_id)
         self.topics = topics
-
         self.consumer = KafkaConsumer(
             *self.topics,
             bootstrap_servers=[self.end_point],
@@ -28,32 +36,32 @@ class KafkaAnalyticsConsumer(Consumer):
             auto_offset_reset="earliest",
         )
 
-        self.conn = duckdb.connect("duckdb_data/ozi.duckdb")
+        self.conn = psycopg2.connect(
+            dbname=os.getenv("POSTGRES_DB", "ozi"),
+            user=os.getenv("POSTGRES_USER", "ozi_user"),
+            password=os.getenv("POSTGRES_PASSWORD", "ozi_pass"),
+            host=os.getenv("POSTGRES_HOST", "postgres"),
+            port=os.getenv("POSTGRES_PORT", "5432")
+        )
+        self.conn.autocommit = True
+        self.cur = self.conn.cursor()
+
         self.ensure_tables_exist()
-        self.cast_buffer = []
-        self.comment_buffer = []
-        self.reaction_buffer = []
+        self.cast_buffer, self.comment_buffer, self.reaction_buffer = [], [], []
 
     def ensure_tables_exist(self):
-        logger.info("Ensuring DuckDB tables exist...")
-        self.conn.execute(create_casts_table())
-        self.conn.execute(create_comments_table())
-        self.conn.execute(create_reactions_table())
-        logger.info("DuckDB tables ready!")
+        logger.info("Ensuring PostgreSQL tables exist...")
+        self.cur.execute(create_casts_table())
+        self.cur.execute(create_comments_table())
+        self.cur.execute(create_reactions_table())
+        logger.info("PostgreSQL tables ready!")
 
     def process(self, msg):
+        logger.info(f"[ANALYTICS] Received message: {json.dumps(msg)[:200]}...")
         try:
             event_type = msg.get("message_subtype")
             if event_type == "CAST_ADD":
-                parent_cast = (
-                    msg.get("raw", {})
-                    .get("merge_message_body", {})
-                    .get("message", {})
-                    .get("data", {})
-                    .get("cast_add_body", {})
-                    .get("parent_cast_id")
-                )
-
+                parent_cast = msg.get("raw", {}).get("merge_message_body", {}).get("message", {}).get("data", {}).get("cast_add_body", {}).get("parent_cast_id")
                 if parent_cast:
                     self.comment_buffer.append(self.prepare_comment_record(msg))
                 else:
@@ -63,7 +71,6 @@ class KafkaAnalyticsConsumer(Consumer):
                 self.reaction_buffer.append(self.prepare_reaction_record(msg))
             else:
                 logger.warning(f"Unknown event_type: {event_type}")
-
         except Exception as e:
             logger.error(f"Failed to process message: {str(e)}")
 
@@ -71,16 +78,11 @@ class KafkaAnalyticsConsumer(Consumer):
         msg_raw = msg["raw"]
         msg_body = msg_raw["merge_message_body"]["message"]["data"]
         cast_info = msg.get("cast", {})
-
+        ts = to_pg_ts(msg_body.get("timestamp"))
         return (
-            int(msg_raw["id"]),
-            msg.get("message_subtype", ""),
-            int(msg["fid"]),
-            datetime.utcfromtimestamp(msg_body["timestamp"]),
-            cast_info.get("text", ""),
-            cast_info.get("language", ""),
-            json.dumps(cast_info.get("embeds", [])),
-            json.dumps(cast_info.get("mentions", [])),
+            int(msg_raw["id"]), msg.get("message_subtype", ""), int(msg["fid"]), ts,
+            cast_info.get("text", ""), cast_info.get("language", ""),
+            json.dumps(cast_info.get("embeds", [])), json.dumps(cast_info.get("mentions", [])),
             msg.get("message_hash", "")
         )
 
@@ -88,39 +90,31 @@ class KafkaAnalyticsConsumer(Consumer):
         msg_raw = msg["raw"]
         msg_body = msg_raw["merge_message_body"]["message"]["data"]
         cast_add_body = msg_body.get("cast_add_body", {})
-
+        ts = to_pg_ts(msg_body.get("timestamp"))
         return (
-            int(msg_raw["id"]),
-            msg.get("message_subtype", ""),
-            int(msg["fid"]),
-            datetime.utcfromtimestamp(msg["timestamp"]),
+            int(msg_raw["id"]), msg.get("message_subtype", ""), int(msg["fid"]), ts,
             int(cast_add_body.get("parent_cast_id", {}).get("fid", 0)),
             cast_add_body.get("parent_cast_id", {}).get("hash", ""),
-            cast_add_body.get("text", ""),
-            msg.get("cast", {}).get("language", ""),
-            json.dumps(msg.get("cast", {}).get("embeds", [])),
-            msg.get("message_hash", "")
+            cast_add_body.get("text", ""), msg.get("cast", {}).get("language", ""),
+            json.dumps(msg.get("cast", {}).get("embeds", [])), msg.get("message_hash", "")
         )
 
     def prepare_reaction_record(self, msg):
         msg_raw = msg["raw"]
+        msg_body = msg_raw["merge_message_body"]["message"]["data"]
+        ts = to_pg_ts(msg_body.get("timestamp"))
         return (
-            int(msg_raw["id"]),
-            msg.get("message_subtype", ""),
-            int(msg["fid"]),
-            datetime.utcfromtimestamp(msg["timestamp"]),
-            msg["reaction"].get("type", ""),
-            int(msg["reaction"].get("target_fid", 0)),
-            msg["reaction"].get("target_hash", ""),
-            msg.get("message_hash", "")
+            int(msg_raw["id"]), msg.get("message_subtype", ""), int(msg["fid"]), ts,
+            msg["reaction"].get("type", ""), int(msg["reaction"].get("target_fid", 0)),
+            msg["reaction"].get("target_hash", ""), msg.get("message_hash", "")
         )
 
     def bulk_insert_casts(self):
         try:
-            self.conn.executemany("""
+            self.cur.executemany("""
                 INSERT INTO casts (id, msg_type, fid, msg_timestamp, text, lang, embeds, mentions, msg_hash)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO NOTHING;
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO NOTHING;
             """, self.cast_buffer)
             logger.info(f"Bulk inserted {len(self.cast_buffer)} casts.")
             self.cast_buffer = []
@@ -130,10 +124,10 @@ class KafkaAnalyticsConsumer(Consumer):
 
     def bulk_insert_comments(self):
         try:
-            self.conn.executemany("""
+            self.cur.executemany("""
                 INSERT INTO comments (id, msg_type, fid, msg_timestamp, parent_fid, parent_hash, text, lang, embeds, msg_hash)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO NOTHING;
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO NOTHING;
             """, self.comment_buffer)
             logger.info(f"Bulk inserted {len(self.comment_buffer)} comments.")
             self.comment_buffer = []
@@ -143,10 +137,10 @@ class KafkaAnalyticsConsumer(Consumer):
 
     def bulk_insert_reactions(self):
         try:
-            self.conn.executemany("""
+            self.cur.executemany("""
                 INSERT INTO reactions (id, msg_type, fid, msg_timestamp, reaction_type, target_fid, target_hash, msg_hash)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO NOTHING;
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO NOTHING;
             """, self.reaction_buffer)
             logger.info(f"Bulk inserted {len(self.reaction_buffer)} reactions.")
             self.reaction_buffer = []

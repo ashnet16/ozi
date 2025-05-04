@@ -7,5 +7,9 @@ class BaseLLM(ABC):
         pass
 
     @abstractmethod
-    def summarize(self, user_query: str, documents: List[str]) -> str:
+    async def summarize(self, user_query: str, documents: List[str]) -> str:
+        pass
+
+    @abstractmethod
+    async def ask(self, prompt: str) -> str:
         pass

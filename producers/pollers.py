@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 import grpc
 from google.protobuf.json_format import MessageToDict
 from kafka import KafkaProducer
@@ -14,7 +15,7 @@ from ozi.producers.config import (
 )
 from ozi.proto import hub_event_pb2, message_pb2, request_response_pb2, rpc_pb2_grpc
 
-FARCASTER_SUBSCRIBE_ENDPOINT = "ec2-13-58-183-70.us-east-2.compute.amazonaws.com:2283"
+SNAPCHAIN_SUBSCRIBE_ENDPOINT = "ec2-13-58-183-70.us-east-2.compute.amazonaws.com:3383"
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -42,9 +43,9 @@ class KafkaJSONTopic(KafkaTopic):
             logger.error("Failed to send to Kafka: %s", e)
 
 
-class FarcasterGRPCPoller(Poller):
-    def __init__(self, end_point=FARCASTER_SUBSCRIBE_ENDPOINT):
-        super().__init__(end_point, "farcaster_grpc")
+class SnapchainGRPCPoller(Poller):
+    def __init__(self, end_point=SNAPCHAIN_SUBSCRIBE_ENDPOINT):
+        super().__init__(end_point, "snapchain_grpc")
         self.channel = grpc.insecure_channel(end_point)
         self.stub = rpc_pb2_grpc.HubServiceStub(self.channel)
         self.topic_main = KafkaJSONTopic(EMBEDDER_TOPIC, topic_type=CAST_ADD_MSG)
@@ -52,29 +53,37 @@ class FarcasterGRPCPoller(Poller):
         self.topic_dlq = KafkaJSONTopic(DLQ_TOPIC, topic_type="dlq")
 
     def poll(self):
-        request = request_response_pb2.SubscribeRequest(event_types=[1, 2, 3])
-        for event in self.stub.Subscribe(request):
-            yield event
+        request = request_response_pb2.SubscribeRequest(
+            event_types=[hub_event_pb2.HUB_EVENT_TYPE_MERGE_MESSAGE]
+        )
+        while True:
+            try:
+                for event in self.stub.Subscribe(request):
+                    yield event
+            except grpc.RpcError as e:
+                logger.warning("Stream error: %s. Reconnecting in 3s...", e)
+                time.sleep(3)
 
     def publish(self, event):
         topic = self._select_topic(event)
         topic.produce(event)
 
     def _select_topic(self, event):
-        if event.get("dlq_reason"):
+        if "dlq_reason" in event:
             return self.topic_dlq
-        msg_type = event.get("message_type", "")
-        if msg_type == CAST_ADD_MSG:
+        if event.get("message_type") == CAST_ADD_MSG:
             return self.topic_main
-        else:
-            return self.topic_other
+        return self.topic_other
 
     def run(self):
-        logger.info("Starting Farcaster gRPC Poller...")
+        logger.info("Starting Snapchain gRPC Poller...")
         for event in self.poll():
-            transformed_event = FarcasterMessageTransformer(event).transform()
-            print(transformed_event)
-            self.publish(transformed_event)
+            try:
+                transformed_event = FarcasterMessageTransformer(event).transform()
+                print(transformed_event)
+                self.publish(transformed_event)
+            except Exception as e:
+                logger.error("Failed to transform/publish event: %s", str(e))
 
 
 class FarcasterMessageTransformer(EventTransformer):
@@ -164,7 +173,7 @@ class FarcasterMessageTransformer(EventTransformer):
                 )
 
         except Exception as e:
-            logger.exception("Failed to transform Farcaster event")
+            logger.exception("Failed to transform Farcaster/Snapchain event")
             output.update(
                 {
                     "error": f"Transformation failed: {str(e)}",
@@ -177,4 +186,4 @@ class FarcasterMessageTransformer(EventTransformer):
 
 
 if __name__ == "__main__":
-    FarcasterGRPCPoller().run()
+    SnapchainGRPCPoller().run()
