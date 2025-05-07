@@ -33,6 +33,13 @@ pg_conn = psycopg2.connect(
 pg_conn.autocommit = True
 cur = pg_conn.cursor()
 
+@app.get("/health")
+def health_check():
+    try:
+        cur.execute("SELECT 1;")
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "details": str(e)}
 
 @app.on_event("startup")
 def ensure_user_queries_table():

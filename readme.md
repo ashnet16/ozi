@@ -2,7 +2,7 @@
 
 **Ozi** is a real-time semantic search and analytics engine for decentralized social networks, starting with [Farcaster](https://www.farcaster.xyz).
 
-It streams casts, comments, and reactions from live events, embeds them for semantic retrieval, and stores structured event data for analytic SQL queries all powered by Kafka, DuckDB, FAISS, and LLMs.
+It streams casts, comments, and reactions from live events, embeds them for semantic retrieval, and stores structured event data for analytic SQL queries all powered by Kafka, Postgres, FAISS, and LLMs.
 
 
 
@@ -16,7 +16,7 @@ It streams casts, comments, and reactions from live events, embeds them for sema
 | Component | Description |
 |-----------|-------------|
 | **Kafka Producers** | Poll and publish Farcaster events into Kafka topics |
-| **Kafka Consumers** | Consume events and write structured data into DuckDB and Chroma/FAISS |
+| **Kafka Consumers** | Consume events and write structured data into Postgres and FAISS |
 | **Postgres** |  relational and lightweight analytic queries |
 | **Vector Database (FAISS)** | Stores text embeddings for semantic search |
 | **FastAPI Server** | Serves APIs for semantic search and structured analytics |
@@ -34,7 +34,7 @@ Ozi's data ingestion and analytics pipeline is designed to prioritize:
 ### 1. High Availability (HA)
 
 - The Kafka analytics consumer is built to **restart automatically** after crashes or restarts.
-- Messages are consumed **continuously** and **buffers are flushed** to DuckDB on normal exit or crash recovery.
+- Messages are consumed **continuously** and **buffers are flushed** to Postgres on normal exit or crash recovery.
 - If the consumer goes down temporarily, it will **reconnect and resume** from the latest Kafka offset without loss.
 
 ---
@@ -49,7 +49,7 @@ Ozi's data ingestion and analytics pipeline is designed to prioritize:
 ### 3. Eventual Consistency
 
 - Ozi is designed to be **eventually consistent**:  
-  All valid Farcaster events (casts, comments, reactions) will eventually appear in DuckDB.
+  All valid Farcaster events (casts, comments, reactions) will eventually appear in Postgres.
 - **Small ingestion delays are acceptable** in favor of higher throughput and system resilience.
 - Queries reflect **near-real-time data** under normal operation.
 
@@ -72,7 +72,7 @@ Ozi's data ingestion and analytics pipeline is designed to prioritize:
 - **analytics/** — Postgres, analytic query services
 - **rag/** — Semantic search APIs, RAG services
 - **consumers/** — Kafka consumers writing structured events
-- **analytics/** - Kafka consumer writing events for analytics queries
+- **analytics/** - Kafka consumer writing events for lightweight analytics queries
 - **producers/** — gRPC poller (Retrieve and write events)
 - **llm/** — Pluggable LLM layer (ChatGPT for now, self-hosted later)
 - **services/** — Search orchestration and query generation
@@ -217,16 +217,16 @@ kafka-console-consumer \
 ```
 
 ## Future Improvements
-- Introduce local LLM support via Ollama for faster, lower-cost inference
-- Improve query and response generation accuracy
-- Enable materialized views for trending topics and analytics rollups
-- Build and integrate social graph for user specific data
-- Expand multi-language support for semantic search and querying
-- Build historical backfill service using Neynar APIs for full Farcaster event history
-- Support background jobs for refreshing vector embeddings over time
-- Add streaming aggregation (live trending topics, leaderboards)
-- Explore distributed ingestion pipelines (scaling Kafka consumers and postgres writers)
-- Optimize hot paths with either Rust or Go as we scale
+- Introduce local LLM support via Ollama for faster, lower-cost inference.
+- Improve query and response generation accuracy.
+- Enable materialized views for trending topics and analytics rollups.
+- Build and integrate social graph for user specific data.
+- Expand multi-language support for semantic search and querying.
+- Build historical backfill service using Neynar APIs for full Farcaster event history.
+- Support background jobs for refreshing vector embeddings over time.
+- Add streaming aggregation (live trending topics, leaderboards).
+- Explore distributed ingestion pipelines (scaling Kafka consumers and postgres writers).
+- Optimize hot paths with either Rust or Go as we scale.
 - Add graceful shutdown handlers (`SIGINT`, `SIGTERM`) to flush all in-memory buffers during container shutdown.
 - Track ingestion speed and Kafka consumer lag for observability.
 - Horizontal scaling: allow partitioned Kafka topics and multiple analytics consumers for high throughput.
