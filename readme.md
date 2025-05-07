@@ -225,7 +225,7 @@ kafka-console-consumer \
 - Build historical backfill service using Neynar APIs for full Farcaster event history
 - Support background jobs for refreshing vector embeddings over time
 - Add streaming aggregation (live trending topics, leaderboards)
-- Explore distributed ingestion pipelines (scaling Kafka consumers and DuckDB writers)
+- Explore distributed ingestion pipelines (scaling Kafka consumers and postgres writers)
 - Optimize hot paths with either Rust or Go as we scale
 - Add graceful shutdown handlers (`SIGINT`, `SIGTERM`) to flush all in-memory buffers during container shutdown.
 - Track ingestion speed and Kafka consumer lag for observability.
