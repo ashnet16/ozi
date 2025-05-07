@@ -6,7 +6,7 @@ It streams casts, comments, and reactions from live events, embeds them for sema
 
 
 
-![OziArchitecture](./april3_design_v1.png)
+![OziArchitecture](./designs/mvp_current.png)
 
 
 ---
@@ -172,53 +172,24 @@ curl -X POST http://localhost:8000/query \
 
 ## Getting Started
 
+
+
 #### 1. Clone and install dependencies
 
 ```bash
 git clone https://github.com/ashnet16/ozi.git
 cd ozi
-pip install -r requirements.txt
 ```
 
-#### 2. Spin up Kafka
+#### 2. Run Ozi vi Makefile
 
 ```
-docker compose up -d
-
-```
-
-#### 3. Run the Farcaster Poller
-
-```
-python3 -m ozi.producers.pollers
-```
-
-OPTIONAL: Run in the background
-
-```
-nohup python3 -m ozi.producers.pollers > pollers.log 2>&1 &
+Make setup
 
 ```
 
-#### 4. Start the Ozi API and databases 
+#### 3. Navigate to localhost:8000 to issue queries to Ozi
 
-```
-docker-compose up -d
-
-```
-
-#### 5. Start the Consumer Service
-
-```
-python3 -m ozi.consumers.consumers
-
-```
-
-OPTIONAL: Run in the background
-
-```
-nohup python3 -m ozi.consumers.consumers > consumers.log 2>&1 &
-```
 
 
 #### Below are the Kafka Topics
