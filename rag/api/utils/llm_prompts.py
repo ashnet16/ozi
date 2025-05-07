@@ -2,14 +2,18 @@ def classify_prompt(user_query: str) -> str:
     return f"""
 You are a classifier for a Farcaster search engine.
 
-Your job is to classify the user’s question into one of two categories:
+Your job is to detect one or more types of intents in a user's question.
 
-1. "semantic" — if the user is asking for **content of casts or comments**, such as opinions, conversations, or natural language text search.
-2. "analytic" — if the user is asking for **counts, metrics, aggregates, or trends**, like number of likes, top users, frequency over time, etc.
+Each intent must be one of:
+- "semantic": asking for the content of casts/comments (opinions, discussions, etc.)
+- "analytic": asking for metrics, aggregates, trends (e.g., counts, likes, top users)
 
-Be conservative — only classify as "analytic" if the user is clearly asking for structured data or metrics.
+If the user query involves **multiple actions**, such as summarizing AND ranking, return them **both**.
 
-Return just one word: "semantic" or "analytic".
+Return a comma-separated list of intents such as:
+- semantic
+- analytic
+- semantic,analytic
 
 User question: "{user_query}"
 """.strip()
@@ -23,27 +27,44 @@ You have access to the following PostgreSQL tables:
 
 - "casts":
     - id: BIGINT
-    - text: TEXT (the actual content of the user's post)
-    - lang: TEXT (short for language, e.g., "en", "es")
-    - embeds: TEXT (a JSON string representing media, links, or attached content)
-    - mentions: TEXT (a JSON string listing user mentions)
+    - msg_type: TEXT
+    - fid: BIGINT
     - msg_timestamp: TIMESTAMP WITH TIME ZONE
+    - text: TEXT
+    - lang: TEXT
+    - embeds: TEXT
+    - mentions: TEXT
+    - msg_hash: TEXT
+    - msg_hash_hex: TEXT
+    - idx_time: TIMESTAMP WITH TIME ZONE
 
 - "comments":
     - id: BIGINT
+    - msg_type: TEXT
+    - fid: BIGINT
+    - msg_timestamp: TIMESTAMP WITH TIME ZONE
     - parent_fid: BIGINT
     - parent_hash: TEXT
-    - text: TEXT (the actual content of the user's comment)
-    - lang: TEXT (short for language, e.g., "en", "es")
-    - embeds: TEXT (a JSON string representing media, links, or attached content)
-    - msg_timestamp: TIMESTAMP WITH TIME ZONE
+    - parent_hash_hex: TEXT
+    - text: TEXT
+    - lang: TEXT
+    - embeds: TEXT
+    - msg_hash: TEXT
+    - msg_hash_hex: TEXT
+    - idx_time: TIMESTAMP WITH TIME ZONE
 
 - "reactions":
     - id: BIGINT
-    - reaction_type: TEXT (e.g., "like", "recast")
+    - msg_type: TEXT
+    - fid: BIGINT
+    - msg_timestamp: TIMESTAMP WITH TIME ZONE
+    - reaction_type: TEXT
     - target_fid: BIGINT
     - target_hash: TEXT
-    - msg_timestamp: TIMESTAMP WITH TIME ZONE
+    - target_hash_hex: TEXT
+    - msg_hash: TEXT
+    - msg_hash_hex: TEXT
+    - idx_time: TIMESTAMP WITH TIME ZONE
 
 Guidelines:
 - Generate valid PostgreSQL SQL syntax.

@@ -1,20 +1,16 @@
-.PHONY: format lint test type-check check proto clean-proto build-duckdb duckdb install-requirements run-consumer clean-docker init-db build-analytics run-analytics dev help clone-consumers
+.PHONY: format lint test type-check check
 
-# Clone consumers folder into analytics/
-clone-consumers:
-	@echo "Cloning consumers/ into analytics/"
-	@cp -r consumers /Users/ashleymitchell/Desktop/ozi/ozi/analytics/
 
-# ------------
-# Developer Commands
-# ------------
+SNAPCHAIN_REPO=https://github.com/farcasterxyz/snapchain.git
+PROTO_SRC=./snapchain/proto/farcaster
+PROTO_DST=./proto
 
 format:
-	poetry run black consumers producers rag llm
-	poetry run isort consumers producers rag llm
+	poetry run black consumers producers rag analytics
+	poetry run isort consumers producers rag analytics
 
 lint:
-	poetry run flake8 consumers producers rag llm
+	poetry run flake8 consumers producers rag analytics
 
 test:
 	poetry run pytest
@@ -24,33 +20,41 @@ type-check:
 
 check: format lint type-check
 
-# ------------
-# Docker/Analytics Commands
-# ------------
+.PHONY: setup build start proto clean-proto
 
-build-duckdb:
-	docker build -t ozi-duckdb .
 
-duckdb:
-	docker run -it --rm -v $$(pwd)/analytics/duckdb_data:/data ozi-duckdb /data/ozi.duckdb
+create-user:
+	sudo groupadd -f ozi && sudo useradd -m -g ozi -s /bin/bash ozi || true
 
-install-requirements:
-	pip install -r requirements.txt
+clone-snapchain:
+	@if [ ! -d "./snapchain" ]; then \
+		echo "Cloning Snapchain..."; \
+		git clone $(SNAPCHAIN_REPO); \
+	else \
+		echo "Snapchain already cloned."; \
+	fi
 
-run-consumer:
-	python -m analytics.consumer
+copy-protos: clone-snapchain
+	@mkdir -p $(PROTO_DST)
+	@cp -r $(PROTO_SRC)/*.proto $(PROTO_DST)/
+	@echo "Copied proto files to $(PROTO_DST)"
 
-clean-docker:
-	docker rmi -f ozi-duckdb || true
-	docker rmi -f ozi-analytics || true
+proto: copy-protos
+	@python -m grpc_tools.protoc \
+		-I$(PROTO_DST) \
+		--python_out=$(PROTO_DST) \
+		--grpc_python_out=$(PROTO_DST) \
+		$(PROTO_DST)/*.proto
+	@echo "Compiled proto files."
 
-init-db:
-	python analytics/init_db.py
+clean-proto:
+	@rm -f $(PROTO_DST)/*_pb2.py $(PROTO_DST)/*_pb2_grpc.py
+	@echo "Cleaned compiled proto files."
 
-build-analytics:
-	docker build -f analytics/Dockerfile -t ozi-analytics .
+build: proto
+	@docker compose build
 
-run-analytics:
-	docker run -it --rm -v $$(pwd)/analytics/duckdb_data:/app/duckdb_data ozi-analytics
+start:
+	@docker compose up -d
 
-dev: build-analytics run-analytics
+setup: create-user build start

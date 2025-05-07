@@ -11,6 +11,7 @@ DANGEROUS_KEYWORDS = [
     "REVOKE",
 ]
 
+
 def validate_safe_sql(sql_query: str) -> None:
     print(f"Validating SQL: {sql_query}")
     sql_clean = sql_query.strip().upper()

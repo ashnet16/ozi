@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, Any
+from typing import Any, List, Optional
+
 
 class Consumer(ABC):
     def __init__(

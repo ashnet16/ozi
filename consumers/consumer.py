@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 import re
@@ -11,13 +12,14 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 from sentence_transformers import SentenceTransformer
 
-from ozi.consumers.base import Consumer
-from ozi.consumers.config import BATCH_SIZE, CAST_ADD_MSG, EMBEDDER_TOPIC
+from consumers.base import Consumer
+from consumers.config import BATCH_SIZE, CAST_ADD_MSG, EMBEDDER_TOPIC
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 URL_REGEX = re.compile(r"http\S+|www\.\S+")
+
 
 def normalize_cast(text):
     if not text:
@@ -26,6 +28,7 @@ def normalize_cast(text):
     text = re.sub(URL_REGEX, "", text)
     return text.strip().lower()
 
+
 def set_defaults(record):
     safe_record = {}
     for k, v in record.items():
@@ -33,13 +36,12 @@ def set_defaults(record):
             safe_record[k] = ""
         elif isinstance(v, (str, int, float, bool)):
             safe_record[k] = v
-        elif isinstance(v, list):
-            safe_record[k] = json.dumps(v)
-        elif isinstance(v, dict):
+        elif isinstance(v, list) or isinstance(v, dict):
             safe_record[k] = json.dumps(v)
         else:
             safe_record[k] = str(v)
     return safe_record
+
 
 def safe_unix_timestamp(ts):
     try:
@@ -48,13 +50,23 @@ def safe_unix_timestamp(ts):
         logger.warning(f"Failed to parse timestamp: {ts}")
         return datetime.now(tz=timezone.utc).isoformat()
 
+
+def b64_to_hex(b64_str):
+    try:
+        return base64.b64decode(b64_str + "==").hex()
+    except Exception:
+        return ""
+
+
 class KafkaEmbedConsumer(Consumer):
     def __init__(self, embedder_hosts, topics, group_id="ozi-embed-consumer-group"):
-        super().__init__(end_point=embedder_hosts[0], topics=topics, consumer_group=group_id)
+        super().__init__(
+            end_point=embedder_hosts[0], topics=topics, consumer_group=group_id
+        )
 
         self.consumer = KafkaConsumer(
             *self.topics,
-            bootstrap_servers=["localhost:9092"],
+            bootstrap_servers=["kafka:29092"],
             group_id=group_id,
             value_deserializer=lambda m: json.loads(m.decode("utf-8")),
             enable_auto_commit=True,
@@ -62,7 +74,7 @@ class KafkaEmbedConsumer(Consumer):
         )
 
         self.embed_model = SentenceTransformer("intfloat/multilingual-e5-base")
-        self.qdrant = QdrantClient(host="localhost", port=6333)
+        self.qdrant = QdrantClient(host="qdrant", port=6333)
         self.collection_name = "farcaster_casts"
         self.ensure_collection_exists()
 
@@ -90,17 +102,23 @@ class KafkaEmbedConsumer(Consumer):
             fid = msg.get("fid")
             timestamp = safe_unix_timestamp(msg.get("timestamp"))
             message_hash = msg.get("message_hash")
+            message_hash_hex = b64_to_hex(message_hash)
 
-            parent_cast = msg.get("raw", {})\
-                             .get("merge_message_body", {})\
-                             .get("message", {})\
-                             .get("data", {})\
-                             .get("cast_add_body", {})\
-                             .get("parent_cast_id")
+            # Raw payload
+            raw_data = (
+                msg.get("raw", {})
+                .get("merge_message_body", {})
+                .get("message", {})
+                .get("data", {})
+            )
 
-            parent_url = cast.get("parent_url")
-            parent_hash = cast.get("parent_hash")
-            is_comment = bool(parent_cast or parent_url or parent_hash)
+            cast_body = raw_data.get("cast_add_body", {})
+            parent_cast = cast_body.get("parent_cast_id", {})
+            parent_url = cast_body.get("parent_url", cast.get("parent_url"))
+            parent_hash_b64 = parent_cast.get("hash") or cast.get("parent_hash")
+            parent_hash_hex = b64_to_hex(parent_hash_b64) if parent_hash_b64 else ""
+
+            is_comment = bool(parent_cast or parent_url or parent_hash_b64)
 
             if not (text and fid and message_hash):
                 continue
@@ -108,21 +126,20 @@ class KafkaEmbedConsumer(Consumer):
             record = {
                 "fid": fid,
                 "timestamp": timestamp,
+                "idx_timestamp": consumer_ts,
                 "text": normalize_cast(text),
                 "language": language,
                 "mentions": cast.get("mentions", []),
                 "embeds": cast.get("embeds", []),
                 "message_hash": message_hash,
+                "message_hash_hex": message_hash_hex,
                 "consumer_ts": consumer_ts,
                 "is_comment": is_comment,
-                "vector_id": str(uuid.uuid4())
+                "vector_id": str(uuid.uuid4()),
+                "parent_fid": parent_cast.get("fid", "") if parent_cast else "",
+                "parent_hash": parent_hash_b64 or "",
+                "parent_hash_hex": parent_hash_hex,
             }
-
-            if isinstance(parent_cast, dict):
-                record["parent_fid"] = parent_cast.get("fid", "")
-                record["parent_hash"] = parent_cast.get("hash", "")
-            elif parent_url or parent_hash:
-                record["parent"] = parent_url or parent_hash
 
             records.append(record)
 
@@ -134,7 +151,9 @@ class KafkaEmbedConsumer(Consumer):
             metadatas = [set_defaults(r) for r in records]
             ids = [r["vector_id"] for r in records]
 
-            vectors = self.embed_model.encode(texts, batch_size=BATCH_SIZE, show_progress_bar=False).tolist()
+            vectors = self.embed_model.encode(
+                texts, batch_size=BATCH_SIZE, show_progress_bar=False
+            ).tolist()
 
             points = [
                 PointStruct(id=ids[i], vector=vectors[i], payload=metadatas[i])
@@ -163,6 +182,7 @@ class KafkaEmbedConsumer(Consumer):
                 logger.error("Kafka error: %s", str(e))
             except Exception as e:
                 logger.error("Unexpected error: %s", str(e))
+
 
 if __name__ == "__main__":
     embedder_hosts = ["localhost:6333"]

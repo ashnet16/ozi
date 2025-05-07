@@ -1,19 +1,20 @@
 import json
 import logging
 import time
+
 import grpc
+from base import EventTransformer, KafkaTopic, Poller
 from google.protobuf.json_format import MessageToDict
 from kafka import KafkaProducer
 from langdetect import detect
+from proto import hub_event_pb2, message_pb2, request_response_pb2, rpc_pb2_grpc
 
-from ozi.producers.base import EventTransformer, KafkaTopic, Poller
-from ozi.producers.config import (
+from producers.config import (
     ANALYTICS_TOPIC,
     CAST_ADD_MSG,
     DLQ_TOPIC,
     EMBEDDER_TOPIC,
 )
-from ozi.proto import hub_event_pb2, message_pb2, request_response_pb2, rpc_pb2_grpc
 
 SNAPCHAIN_SUBSCRIBE_ENDPOINT = "ec2-13-58-183-70.us-east-2.compute.amazonaws.com:3383"
 
@@ -22,9 +23,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 class KafkaJSONTopic(KafkaTopic):
-    def __init__(
-        self, topic_name, bootstrap_servers="localhost:9092", topic_type=None
-    ):
+    def __init__(self, topic_name, bootstrap_servers="kafka:29092", topic_type=None):
         super().__init__(topic_name, topic_type)
         self.producer = KafkaProducer(
             bootstrap_servers=[bootstrap_servers],

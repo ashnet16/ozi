@@ -1,10 +1,10 @@
-import json
 import asyncio
-import psycopg2
+import json
 import os
 from datetime import datetime
 from urllib.parse import quote
-from fastapi import FastAPI
+
+import psycopg2
 from api.models.models import QueryRequest
 from api.services.search import search_vector
 from api.utils.llm_prompts import (
@@ -12,10 +12,11 @@ from api.utils.llm_prompts import (
     sql_generation_prompt,
     summarization_prompt,
 )
+from api.utils.sql_formatter import clean_llm_sql, clean_sql
 from api.utils.sql_validator import validate_safe_sql
-from api.utils.sql_formatter import clean_sql, clean_llm_sql
-from llm.factory import LLMFactory
+from fastapi import FastAPI
 from llm.chatgpt.connection import ChatGPTConnectionInfo
+from llm.factory import LLMFactory
 
 app = FastAPI()
 
@@ -33,12 +34,34 @@ pg_conn.autocommit = True
 cur = pg_conn.cursor()
 
 
+@app.on_event("startup")
+def ensure_user_queries_table():
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_queries (
+            id SERIAL PRIMARY KEY,
+            query TEXT NOT NULL,
+            classification TEXT[],
+            sql_query TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+    """
+    )
+    print("[INFO] Ensured user_queries table exists.")
+
+
 @app.post("/search")
 async def search_router(request: QueryRequest):
-    classification = (await llm_client.ask(classify_prompt(request.query))).strip().lower()
+    classification = (
+        (await llm_client.ask(classify_prompt(request.query))).strip().lower()
+    )
     print(f"[DEBUG] classify_query → {classification}")
 
-    if classification == "semantic":
+    intents = [c.strip() for c in classification.split(",")]
+    response = {"query": request.query, "classification": intents}
+    sql_code_for_log = None
+
+    if "semantic" in intents:
         vector_hits = await search_vector(request)
         top_texts = []
         async for line in vector_hits.body_iterator:
@@ -51,39 +74,38 @@ async def search_router(request: QueryRequest):
             if top_texts
             else "No relevant casts found to summarize."
         )
+        response["summary"] = summary
+        response["semantic_results"] = top_texts
 
-        return {
-            "query": request.query,
-            "classification": "semantic",
-            "summary": summary,
-            "results": top_texts,
-        }
-
-    elif classification == "analytic":
+    if "analytic" in intents:
         sql_prompt = sql_generation_prompt(request.query)
         sql_code = (await llm_client.ask(sql_prompt)).strip()
         sql_code = clean_llm_sql(sql_code)
         sql_code = clean_sql(sql_code)
         validate_safe_sql(sql_code)
 
+        sql_code_for_log = sql_code
+
         cur.execute(sql_code)
         results = cur.fetchall()
         short_results = results[:100]
-
         flat_rows = [", ".join(map(str, row)) for row in short_results]
-        summary_input = "\n".join(flat_rows)
-        summary = await llm_client.ask(summarization_prompt(request.query, summary_input))
 
+        summary = await llm_client.ask(summarization_prompt(request.query, flat_rows))
         sql_encoded = quote(sql_code)
 
-        return {
-            "query": request.query,
-            "classification": "analytic",
-            "sql": sql_code,
-            "sample_results": short_results,
-            "summary": summary.strip(),
-            "full_results_link": f"/query?sql={sql_encoded}",
-        }
+        response["sql"] = sql_code
+        response["sample_results"] = short_results
+        response["sql_summary"] = summary.strip()
+        response["full_results_link"] = f"/query?sql={sql_encoded}"
+
+    cur.execute(
+        "INSERT INTO user_queries (query, classification, sql_query) VALUES (%s, %s, %s)",
+        (request.query, intents, sql_code_for_log),
+    )
+
+    return response
+
 
 @app.get("/query")
 async def query_full(sql: str):
@@ -97,3 +119,19 @@ async def query_full(sql: str):
 
     results = [dict(zip(columns, row)) for row in rows]
     return {"results": results}
+
+
+@app.get("/queries")
+def list_queries(limit: int = 100):
+    cur.execute(
+        """
+        SELECT id, query, classification, sql_query, created_at
+        FROM user_queries
+        ORDER BY created_at DESC
+        LIMIT %s;
+    """,
+        (limit,),
+    )
+    rows = cur.fetchall()
+    columns = [desc[0] for desc in cur.description]
+    return {"recent_queries": [dict(zip(columns, row)) for row in rows]}

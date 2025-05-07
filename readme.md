@@ -1,6 +1,6 @@
-# Ozi 🧠📡
+# Ozi
 
-**Ozi** is an open-source real-time semantic search and analytics engine for decentralized social networks, starting with [Farcaster](https://www.farcaster.xyz).
+**Ozi** is a real-time semantic search and analytics engine for decentralized social networks, starting with [Farcaster](https://www.farcaster.xyz).
 
 It streams casts, comments, and reactions from live events, embeds them for semantic retrieval, and stores structured event data for analytic SQL queries all powered by Kafka, DuckDB, FAISS, and LLMs.
 
@@ -11,21 +11,21 @@ It streams casts, comments, and reactions from live events, embeds them for sema
 
 ---
 
-## ⚙️ Architecture Overview
+## Architecture Overview
 
 | Component | Description |
 |-----------|-------------|
 | **Kafka Producers** | Poll and publish Farcaster events into Kafka topics |
 | **Kafka Consumers** | Consume events and write structured data into DuckDB and Chroma/FAISS |
-| **DuckDB** | Fast OLAP database for time-windowed, relational, and analytic queries |
-| **Vector Database (Chroma/FAISS)** | Stores text embeddings for semantic search |
+| **Postgres** |  relational and lightweight analytic queries |
+| **Vector Database (FAISS)** | Stores text embeddings for semantic search |
 | **FastAPI Server** | Serves APIs for semantic search and structured analytics |
 | **LLM Service (ChatGPT / Ollama)** | Classifies user queries and generates SQL if needed |
 | **RAG Layer** | Powers retrieval-augmented generation over event streams |
 
 
 
-## ⚡ System Guarantees
+##  System Guarantees
 
 Ozi's data ingestion and analytics pipeline is designed to prioritize:
 
@@ -42,8 +42,6 @@ Ozi's data ingestion and analytics pipeline is designed to prioritize:
 ### 2. Reliability
 
 - **At least once processing**: Kafka guarantees messages are delivered at least once to the consumer.
-- **Idempotent writes**: All inserts into DuckDB use `ON CONFLICT(id) DO NOTHING` to prevent duplication in the database.
-- **Crash-safe ingestion**: Buffered records are written immediately to disk after bulk insertion to DuckDB.
 - **Bulk insertion**: Records are inserted in efficient batches for speed and to minimize memory usage.
 
 ---
@@ -62,36 +60,36 @@ Ozi's data ingestion and analytics pipeline is designed to prioritize:
 | Principle | How Ozi Achieves It |
 |:---|:---|
 | High Availability | Consumer automatically reconnects to Kafka after crashes. |
-| Reliable Ingestion | Idempotent inserts into DuckDB, no duplicates even under retries. |
 | Eventual Consistency | Message arrival order is not strictly enforced; data is ingested reliably over time. |
-| Efficient Batching | Messages are buffered by type and bulk inserted to DuckDB. |
+| Efficient Batching | Messages are buffered by type and bulk inserted. |
 | Graceful Degradation | If traffic spikes, consumers process with slight delay without dropping data. |
 | Minimal Operator Overhead | Self-healing consumer design with automatic reconnection and flush logic. |
 
 ---
 
-## 📦 Microservices and Components
+## Microservices and Components
 
-- **analytics/** — DuckDB management, analytic query services
+- **analytics/** — Postgres, analytic query services
 - **rag/** — Semantic search APIs, RAG services
 - **consumers/** — Kafka consumers writing structured events
-- **producers/** — Kafka pollers (optional, for testing/local ingestion)
-- **llm/** — Pluggable LLM layer (ChatGPT for now, Ollama later)
+- **analytics/** - Kafka consumer writing events for analytics queries
+- **producers/** — gRPC poller (Retrieve and write events)
+- **llm/** — Pluggable LLM layer (ChatGPT for now, self-hosted later)
 - **services/** — Search orchestration and query generation
 - **utils/** — Shared utilities (e.g., SQL validator)
 - **models.py** — Pydantic models for API requests/responses
 - **main.py** — FastAPI app wiring and router mounting
 
 ---
-## ⚡ Data Flow
+## Data Flow
 
 Kafka Producer → Kafka Topic (casts/comments/reactions)
-Kafka Consumer → Writes to DuckDB + Vector DB
+Kafka Consumer → Writes to postgres + Vector DB
 FastAPI → /search → LLM classifies → (Semantic search OR SQL generation)
 FastAPI → /query → Stream full analytic query results
 
 
-## 🧪 Use Cases & Example Queries
+## Use Cases & Example Queries
 
 Ozi lets you explore Farcaster activity in real-time whether you're a researcher, builder, or curious user.
 
@@ -103,7 +101,7 @@ Ozi lets you explore Farcaster activity in real-time whether you're a researcher
 
 ---
 
-### 🧠 Ask Anything
+### Ask Anything
 
 You can interact with Ozi using natural language or SQL. The LLM will translate your questions into queries against the analytics engine. The UI layer will paginate the results (top 5).
 
@@ -136,42 +134,43 @@ curl -X POST http://localhost:8000/query \
 ```
 ---
 
-## 🛠️ Technologies Used
+## Technologies Used
 
 - **[FastAPI](https://fastapi.tiangolo.com/)** — High-performance Python web framework for building APIs
-- **[DuckDB](https://duckdb.org/)** — Fast OLAP database for analytical queries on structured data
+- **[Postgres](https://www.postgresql.org/)** — Database for lightweight analytical queries on structured data
 - **[Kafka](https://kafka.apache.org/)** — Distributed event streaming platform for ingesting real-time events
-- **[Chroma](https://docs.trychroma.com/)** / **[FAISS](https://github.com/facebookresearch/faiss)** — Vector databases for semantic search over cast embeddings
+- **[FAISS](https://github.com/facebookresearch/faiss)** — Vector databases for semantic search over cast embeddings
 - **[Sentence-Transformers](https://www.sbert.net/)** — Text embedding models for semantic similarity search
 - **[OpenAI / ChatGPT APIs](https://platform.openai.com/)** — Language model service for query classification and SQL generation
 - **[Docker + Docker Compose](https://docs.docker.com/compose/)** — Containerization and local orchestration of services
 
 
-## 🛠️ Project Status
+## Project Status
 
 > Ozi is in early WIP. We’re building in public and welcoming feedback.
 
 - ✅ Kafka ingestion
 - ✅ Embedder master for LLM-based indexing
 - ✅ Query API (FastAPI)
-- 🧩 Historical Data Naynar
+- 🧩 Historical Data with Naynar
 - 🧩 Analytics / dashboarding
 - 🧩 Warpcast frame integration
 - 🧩 Token/gov idea experiments
 
 ---
 
-## 📖 API Endpoints
+##  API Endpoints
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `POST` | `/search` | Search semantic or analytic queries |
-| `GET`  | `/query` | Stream full analytic query results |
-| `GET`  | `/health` | Health check to verify API is running |
-| `GET`  | `/debug` | Debug endpoint to inspect sample data |
+| `POST` | `/search`  | Search semantic or analytic queries |
+| `GET`  | `/query`   |  Full analytic query results |
+| `GET`  | `/health`  | Health check to verify API is running |
+| `GET`  | `/queries` | Returns the last 10 queries received by Ozi |
 
 
-## 🚀 Getting Started
+
+## Getting Started
 
 #### 1. Clone and install dependencies
 
@@ -246,10 +245,11 @@ kafka-console-consumer \
 
 ```
 
-## 🚀 Future Improvements
+## Future Improvements
 - Introduce local LLM support via Ollama for faster, lower-cost inference
+- Improve query and response generation accuracy
 - Enable materialized views for trending topics and analytics rollups
-- Add periodic incremental Z-Order clustering for optimizing DuckDB storage
+- Build and integrate social graph for user specific data
 - Expand multi-language support for semantic search and querying
 - Build historical backfill service using Neynar APIs for full Farcaster event history
 - Support background jobs for refreshing vector embeddings over time

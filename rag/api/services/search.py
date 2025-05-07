@@ -1,8 +1,9 @@
 import json
 from typing import List
+
+from fastapi.responses import StreamingResponse
 from qdrant_client import QdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue
-from fastapi.responses import StreamingResponse
 from sentence_transformers import SentenceTransformer
 
 client = QdrantClient(host="qdrant", port=6333)
@@ -10,6 +11,7 @@ embed_model = SentenceTransformer("intfloat/multilingual-e5-base")
 collection_name = "farcaster_casts"
 
 SUMMARY_LIMIT = 1000
+
 
 async def search_vector(request):
     query_vector = embed_model.encode(request.query).tolist()
@@ -20,10 +22,14 @@ async def search_vector(request):
         filters.append(FieldCondition(key="fid", match=MatchValue(value=request.fid)))
 
     if request.language:
-        filters.append(FieldCondition(key="language", match=MatchValue(value=request.language)))
+        filters.append(
+            FieldCondition(key="language", match=MatchValue(value=request.language))
+        )
 
     if request.is_comment is not None:
-        filters.append(FieldCondition(key="is_comment", match=MatchValue(value=request.is_comment)))
+        filters.append(
+            FieldCondition(key="is_comment", match=MatchValue(value=request.is_comment))
+        )
 
     filter_obj = Filter(must=filters) if filters else None
 
@@ -35,9 +41,6 @@ async def search_vector(request):
         with_payload=True,
     )
 
-    top_hits_for_summary: List[str] = [
-        hit.payload.get("text", "") for hit in results[:SUMMARY_LIMIT]
-    ]
     async def event_generator():
         for hit in results:
             if hit.score >= request.min_score:

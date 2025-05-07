@@ -11,7 +11,8 @@ COPY analytics/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
-COPY analytics /app/
+COPY analytics/ /app/
+COPY consumers/ /app/consumers/
 
 ENV PYTHONPATH=/app
 

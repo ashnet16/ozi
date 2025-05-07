@@ -1,6 +1,11 @@
-import duckdb
 import os
-from table_queries import create_casts_table, create_comments_table, create_reactions_table
+
+import duckdb
+from table_queries import (
+    create_casts_table,
+    create_comments_table,
+    create_reactions_table,
+)
 
 os.makedirs("duckdb_data", exist_ok=True)
 

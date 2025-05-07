@@ -18,12 +18,12 @@ services:
     depends_on:
       - zookeeper
     environment:
-        KAFKA_BROKER_ID: 1
-        KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,DOCKER:PLAINTEXT
-        KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,DOCKER://kafka:29092
-        KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,DOCKER://0.0.0.0:29092
-        KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,DOCKER:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,DOCKER://kafka:29092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,DOCKER://0.0.0.0:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
   postgres:
     image: postgres:15
@@ -50,20 +50,51 @@ services:
 
   consumer:
     build:
-      context: .
-      dockerfile: analytics/Dockerfile
+        context: .
+        dockerfile: analytics/Dockerfile
     container_name: analytics-consumer
+    restart: always
     environment:
-      - KAFKA_BOOTSTRAP_SERVER=kafka:29092
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=ozi
-      - POSTGRES_USER=ozi_user
-      - POSTGRES_PASSWORD=ozi_pass
+        - KAFKA_BOOTSTRAP_SERVER=kafka:29092
+        - POSTGRES_HOST=postgres
+        - POSTGRES_DB=ozi
+        - POSTGRES_USER=ozi_user
+        - POSTGRES_PASSWORD=ozi_pass
+    depends_on:
+        - kafka
+        - postgres
+    volumes:
+        - ./analytics:/app
+        - ./consumers:/app/consumers
+    command: python consumer.py
+
+  poller:
+    build:
+      context: .
+      dockerfile: producers/Dockerfile
+    container_name: ozi-poller
+    volumes:
+      - ./producers:/app/producers
+      - ./proto:/app/proto
     depends_on:
       - kafka
-      - postgres
+    environment:
+      - KAFKA_BOOTSTRAP_SERVER=kafka:29092
+    command: python -m poller
+
+  semantic-consumer:
+    build:
+      context: .
+      dockerfile: consumers/Dockerfile
+    container_name: ozi-semantic-consumer
     volumes:
-      - ./analytics:/app/analytics
+      - ./consumers:/app/consumers
+    depends_on:
+      - kafka
+      - qdrant
+    environment:
+      - VECTOR_DB_HOST=qdrant
+      - VECTOR_DB_PORT=6333
     command: python -m consumer
 
   ozi-api:
@@ -76,7 +107,7 @@ services:
     environment:
       - VECTOR_DB_HOST=qdrant
       - VECTOR_DB_PORT=6333
-      - OPENAI_API_KEY=<KEY_HERE>
+      - OPENAI_API_KEY= <KEY_HERE>
       - POSTGRES_HOST=postgres
       - POSTGRES_DB=ozi
       - POSTGRES_USER=ozi_user

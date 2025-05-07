@@ -1,6 +1,8 @@
-from openai import AsyncOpenAI
 from typing import List
+
 from llm.base import BaseLLM
+from openai import AsyncOpenAI
+
 
 class ChatGPTLLM(BaseLLM):
     def __init__(self):
@@ -8,8 +10,7 @@ class ChatGPTLLM(BaseLLM):
 
     def connect(self, connection_info):
         self.client = AsyncOpenAI(
-            api_key=connection_info.api_key,
-            base_url=connection_info.base_url
+            api_key=connection_info.api_key, base_url=connection_info.base_url
         )
 
     async def ask(self, prompt: str) -> str:
@@ -23,13 +24,15 @@ class ChatGPTLLM(BaseLLM):
         )
         return await self.generate(
             prompt,
-            system_prompt="You are a helpful assistant summarizing search results."
+            system_prompt="You are a helpful assistant summarizing search results.",
         )
 
-    async def generate(self, prompt: str, system_prompt: str = "You are a helpful assistant.") -> str:
+    async def generate(
+        self, prompt: str, system_prompt: str = "You are a helpful assistant."
+    ) -> str:
         base_messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ]
 
         try:
@@ -37,7 +40,7 @@ class ChatGPTLLM(BaseLLM):
                 model="gpt-4-turbo",
                 messages=base_messages,
                 temperature=0.3,
-                max_tokens=500
+                max_tokens=500,
             )
         except Exception as e:
             if "model" in str(e).lower() or "not found" in str(e).lower():
@@ -46,10 +49,9 @@ class ChatGPTLLM(BaseLLM):
                     model="gpt-3.5-turbo",
                     messages=base_messages,
                     temperature=0.3,
-                    max_tokens=500
+                    max_tokens=500,
                 )
             else:
                 raise
 
         return response.choices[0].message.content
-
