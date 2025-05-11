@@ -2,7 +2,7 @@
 
 **Ozi** is a real-time semantic search and analytics engine for decentralized social networks, starting with [Farcaster](https://www.farcaster.xyz).
 
-It streams casts, comments, and reactions from live events, embeds them for semantic retrieval, and stores structured event data for analytic SQL queries all powered by Kafka, Postgres, FAISS, and LLMs.
+It streams casts, comments, and reactions from live events, embeds them for semantic retrieval, and stores structured event data for analytic SQL queries all powered by Kafka, Postgres, FAISS, and LLMs. Note this repo contains only the development environment.
 
 
 
