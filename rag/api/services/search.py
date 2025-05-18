@@ -1,5 +1,4 @@
 import json
-from typing import List
 
 from fastapi.responses import StreamingResponse
 from qdrant_client import QdrantClient
@@ -10,26 +9,14 @@ client = QdrantClient(host="qdrant", port=6333)
 embed_model = SentenceTransformer("intfloat/multilingual-e5-base")
 collection_name = "farcaster_casts"
 
-SUMMARY_LIMIT = 1000
-
-
 async def search_vector(request):
     query_vector = embed_model.encode(request.query).tolist()
 
     filters = []
 
-    if request.fid:
+    if request.search_mode == "general" and request.fid:
         filters.append(FieldCondition(key="fid", match=MatchValue(value=request.fid)))
 
-    if request.language:
-        filters.append(
-            FieldCondition(key="language", match=MatchValue(value=request.language))
-        )
-
-    if request.is_comment is not None:
-        filters.append(
-            FieldCondition(key="is_comment", match=MatchValue(value=request.is_comment))
-        )
 
     filter_obj = Filter(must=filters) if filters else None
 

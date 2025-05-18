@@ -20,14 +20,12 @@ logging.basicConfig(level=logging.INFO)
 
 URL_REGEX = re.compile(r"http\S+|www\.\S+")
 
-
 def normalize_cast(text):
     if not text:
         return ""
     text = emoji.demojize(text, delimiters=(":", ":"))
     text = re.sub(URL_REGEX, "", text)
     return text.strip().lower()
-
 
 def set_defaults(record):
     safe_record = {}
@@ -36,12 +34,11 @@ def set_defaults(record):
             safe_record[k] = ""
         elif isinstance(v, (str, int, float, bool)):
             safe_record[k] = v
-        elif isinstance(v, list) or isinstance(v, dict):
+        elif isinstance(v, (list, dict)):
             safe_record[k] = json.dumps(v)
         else:
             safe_record[k] = str(v)
     return safe_record
-
 
 def safe_unix_timestamp(ts):
     try:
@@ -50,19 +47,15 @@ def safe_unix_timestamp(ts):
         logger.warning(f"Failed to parse timestamp: {ts}")
         return datetime.now(tz=timezone.utc).isoformat()
 
-
 def b64_to_hex(b64_str):
     try:
         return base64.b64decode(b64_str + "==").hex()
     except Exception:
         return ""
 
-
 class KafkaEmbedConsumer(Consumer):
     def __init__(self, embedder_hosts, topics, group_id="ozi-embed-consumer-group"):
-        super().__init__(
-            end_point=embedder_hosts[0], topics=topics, consumer_group=group_id
-        )
+        super().__init__(end_point=embedder_hosts[0], topics=topics, consumer_group=group_id)
 
         self.consumer = KafkaConsumer(
             *self.topics,
@@ -104,7 +97,6 @@ class KafkaEmbedConsumer(Consumer):
             message_hash = msg.get("message_hash")
             message_hash_hex = b64_to_hex(message_hash)
 
-            # Raw payload
             raw_data = (
                 msg.get("raw", {})
                 .get("merge_message_body", {})
@@ -146,25 +138,21 @@ class KafkaEmbedConsumer(Consumer):
         return records
 
     def write_to_qdrant(self, records):
-        try:
-            texts = [r["text"] for r in records]
-            metadatas = [set_defaults(r) for r in records]
-            ids = [r["vector_id"] for r in records]
+        texts = [r["text"] for r in records]
+        metadatas = [set_defaults(r) for r in records]
+        ids = [r["vector_id"] for r in records]
 
-            vectors = self.embed_model.encode(
-                texts, batch_size=BATCH_SIZE, show_progress_bar=False
-            ).tolist()
+        vectors = self.embed_model.encode(
+            texts, batch_size=BATCH_SIZE, show_progress_bar=False
+        ).tolist()
 
-            points = [
-                PointStruct(id=ids[i], vector=vectors[i], payload=metadatas[i])
-                for i in range(len(records))
-            ]
+        points = [
+            PointStruct(id=ids[i], vector=vectors[i], payload=metadatas[i])
+            for i in range(len(records))
+        ]
 
-            self.qdrant.upsert(collection_name=self.collection_name, points=points)
-            logger.info("Successfully wrote %d embeddings to Qdrant.", len(points))
-
-        except Exception as e:
-            logger.error("Error writing embeddings to Qdrant: %s", str(e))
+        self.qdrant.upsert(collection_name=self.collection_name, points=points)
+        logger.info("Successfully wrote %d embeddings to Qdrant.", len(points))
 
     def consume(self):
         logger.info("Started Kafka Embedder Consumer on topics: %s", self.topics)
@@ -173,11 +161,17 @@ class KafkaEmbedConsumer(Consumer):
         for message in self.consumer:
             try:
                 buffer.append(message.value)
+
                 if len(buffer) >= BATCH_SIZE:
                     records = self.process(buffer)
                     if records:
-                        self.write_to_qdrant(records)
-                    buffer = []
+                        try:
+                            self.write_to_qdrant(records)
+                            buffer = []  # Only clear on success
+                        except Exception as e:
+                            logger.error("Retrying Qdrant write next round: %s", str(e))
+                            # Optionally log to DLQ or file here
+
             except KafkaError as e:
                 logger.error("Kafka error: %s", str(e))
             except Exception as e:

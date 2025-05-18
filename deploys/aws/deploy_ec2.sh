@@ -2,13 +2,13 @@
 
 set -euo pipefail
 
-OZI_REPO="https://github.com/YOUR_USERNAME/ozi.git"
+OZI_REPO="https://github.com/ashnet16/ozi.git"
 SNAPCHAIN_REPO="https://github.com/farcasterxyz/snapchain.git"
 INSTALL_DIR="$HOME/ozi-deploy"
 PROTO_DEST="$INSTALL_DIR/ozi/ozi/proto"
 SERVICE_NAME="ozi"
 
-echo "🔧 Installing Docker..."
+echo "Installing Docker..."
 sudo apt-get update
 sudo apt-get install -y \
     docker.io \

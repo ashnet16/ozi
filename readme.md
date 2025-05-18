@@ -184,7 +184,7 @@ cd ozi
 #### 2. Run Ozi vi Makefile
 
 ```
-Make setup
+make setup
 
 ```
 

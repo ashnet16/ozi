@@ -2,11 +2,13 @@ import base64
 import json
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 import psycopg2
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
+from psycopg2 import OperationalError
 from table_queries import (
     create_casts_table,
     create_comments_table,
@@ -53,25 +55,36 @@ class KafkaAnalyticsConsumer(Consumer):
             auto_offset_reset="earliest",
         )
 
-        self.conn = psycopg2.connect(
-            dbname=os.getenv("POSTGRES_DB", "ozi"),
-            user=os.getenv("POSTGRES_USER", "ozi_user"),
-            password=os.getenv("POSTGRES_PASSWORD", "ozi_pass"),
-            host=os.getenv("POSTGRES_HOST", "postgres"),
-            port=os.getenv("POSTGRES_PORT", "5432"),
-        )
-        self.conn.autocommit = True
-        self.cur = self.conn.cursor()
-
-        self.ensure_tables_exist()
         self.cast_buffer, self.comment_buffer, self.reaction_buffer = [], [], []
+        self.connect_to_db()
+        self.ensure_tables_exist()
+
+    def connect_to_db(self):
+        while True:
+            try:
+                self.conn = psycopg2.connect(
+                    dbname=os.getenv("POSTGRES_DB", "ozi"),
+                    user=os.getenv("POSTGRES_USER", "ozi_user"),
+                    password=os.getenv("POSTGRES_PASSWORD", "ozi_pass"),
+                    host=os.getenv("POSTGRES_HOST", "postgres"),
+                    port=os.getenv("POSTGRES_PORT", "5432"),
+                )
+                self.conn.autocommit = True
+                logger.info("Connected to PostgreSQL.")
+                break
+            except OperationalError as e:
+                logger.error("PostgreSQL connection failed, retrying in 5s: %s", e)
+                time.sleep(5)
 
     def ensure_tables_exist(self):
-        logger.info("Ensuring PostgreSQL tables exist...")
-        self.cur.execute(create_casts_table())
-        self.cur.execute(create_comments_table())
-        self.cur.execute(create_reactions_table())
-        logger.info("PostgreSQL tables ready!")
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(create_casts_table())
+                cur.execute(create_comments_table())
+                cur.execute(create_reactions_table())
+            logger.info("PostgreSQL tables ready.")
+        except Exception as e:
+            logger.error("Failed to ensure tables exist: %s", e)
 
     def process(self, msg):
         logger.info(f"[ANALYTICS] Received message: {json.dumps(msg)[:200]}...")
@@ -90,11 +103,10 @@ class KafkaAnalyticsConsumer(Consumer):
                     self.comment_buffer.append(self.prepare_comment_record(msg))
                 else:
                     self.cast_buffer.append(self.prepare_cast_record(msg))
-
             elif event_type == "REACTION_ADD":
                 self.reaction_buffer.append(self.prepare_reaction_record(msg))
             else:
-                logger.warning(f"Unknown event_type: {event_type}")
+                logger.warning(f"⚠️ Unknown event_type: {event_type}")
         except Exception as e:
             logger.error(f"Failed to process message: {str(e)}")
 
@@ -159,64 +171,66 @@ class KafkaAnalyticsConsumer(Consumer):
         )
 
     def bulk_insert_casts(self):
+        if not self.cast_buffer:
+            return
         try:
-            self.cur.executemany(
-                """
-                INSERT INTO casts (id, msg_type, fid, msg_timestamp, text, lang, embeds, mentions, msg_hash, msg_hash_hex, idx_time)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (id) DO NOTHING;
-            """,
-                self.cast_buffer,
-            )
+            with self.conn.cursor() as cur:
+                cur.executemany(
+                    """
+                    INSERT INTO casts (id, msg_type, fid, msg_timestamp, text, lang, embeds, mentions, msg_hash, msg_hash_hex, idx_time)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO NOTHING;
+                """,
+                    self.cast_buffer,
+                )
             logger.info(f"Bulk inserted {len(self.cast_buffer)} casts.")
             self.cast_buffer = []
         except Exception as e:
-            logger.error(f"Failed bulk insert casts: {str(e)}")
-            self.cast_buffer = []
+            logger.error(f"Failed to insert casts (will retry): {str(e)}")
 
     def bulk_insert_comments(self):
+        if not self.comment_buffer:
+            return
         try:
-            self.cur.executemany(
-                """
-                INSERT INTO comments (id, msg_type, fid, msg_timestamp, parent_fid, parent_hash, parent_hash_hex, text, lang, embeds, msg_hash, msg_hash_hex, idx_time)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (id) DO NOTHING;
-            """,
-                self.comment_buffer,
-            )
+            with self.conn.cursor() as cur:
+                cur.executemany(
+                    """
+                    INSERT INTO comments (id, msg_type, fid, msg_timestamp, parent_fid, parent_hash, parent_hash_hex, text, lang, embeds, msg_hash, msg_hash_hex, idx_time)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO NOTHING;
+                """,
+                    self.comment_buffer,
+                )
             logger.info(f"Bulk inserted {len(self.comment_buffer)} comments.")
             self.comment_buffer = []
         except Exception as e:
-            logger.error(f"Failed bulk insert comments: {str(e)}")
-            self.comment_buffer = []
+            logger.error(f"Failed to insert comments (will retry): {str(e)}")
 
     def bulk_insert_reactions(self):
+        if not self.reaction_buffer:
+            return
         try:
-            self.cur.executemany(
-                """
-                INSERT INTO reactions (id, msg_type, fid, msg_timestamp, reaction_type, target_fid, target_hash, target_hash_hex, msg_hash, msg_hash_hex, idx_time)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (id) DO NOTHING;
-            """,
-                self.reaction_buffer,
-            )
+            with self.conn.cursor() as cur:
+                cur.executemany(
+                    """
+                    INSERT INTO reactions (id, msg_type, fid, msg_timestamp, reaction_type, target_fid, target_hash, target_hash_hex, msg_hash, msg_hash_hex, idx_time)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO NOTHING;
+                """,
+                    self.reaction_buffer,
+                )
             logger.info(f"Bulk inserted {len(self.reaction_buffer)} reactions.")
             self.reaction_buffer = []
         except Exception as e:
-            logger.error(f"Failed bulk insert reactions: {str(e)}")
-            self.reaction_buffer = []
+            logger.error(f"Failed to insert reactions (will retry): {str(e)}")
 
     def flush_buffers(self):
-        if self.cast_buffer:
-            self.bulk_insert_casts()
-        if self.comment_buffer:
-            self.bulk_insert_comments()
-        if self.reaction_buffer:
-            self.bulk_insert_reactions()
+        self.bulk_insert_casts()
+        self.bulk_insert_comments()
+        self.bulk_insert_reactions()
 
     def consume(self):
         logger.info("Starting Kafka analytics consumer for topics: %s", self.topics)
-
         for message in self.consumer:
             try:
                 self.process(message.value)
@@ -226,12 +240,13 @@ class KafkaAnalyticsConsumer(Consumer):
                     or len(self.reaction_buffer) >= BATCH_SIZE
                 ):
                     self.flush_buffers()
-
+            except OperationalError:
+                logger.warning("Lost PostgreSQL connection, reconnecting...")
+                self.connect_to_db()
             except KafkaError as e:
-                logger.error("Kafka error while consuming message: %s", str(e))
+                logger.error("Kafka error: %s", str(e))
             except Exception as e:
-                logger.error("Unexpected error while consuming message: %s", str(e))
-
+                logger.error("Unexpected error: %s", str(e))
         self.flush_buffers()
 
 

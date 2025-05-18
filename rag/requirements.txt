@@ -15,4 +15,5 @@ pycountry
 qdrant-client==1.7.0
 openai==1.76.0
 psycopg2-binary==2.9.9
+emoji
 
