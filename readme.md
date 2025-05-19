@@ -2,8 +2,8 @@
 
 **Ozi** is a real-time semantic search and analytics engine for decentralized social networks, starting with [Farcaster](https://www.farcaster.xyz).
 
-It streams casts, comments, and reactions from live events, embeds them for semantic retrieval, and stores structured event data for analytic SQL queries all powered by Kafka, Postgres, FAISS, and LLMs. Note this repo contains only the development environment.
-
+It streams casts, comments, and reactions from live events, embeds them for semantic retrieval, and stores structured event data for analytic SQL queries—all powered by Kafka, Postgres, FAISS, and LLMs.
+Note: This repository contains only the development environment for the MVP. While the microservices here can be deployed to EC2 instances for a fully functioning engine, you may encounter reliability and availability issues as data scales, due to throughput and latency limitations inherent in the current Python-based implementation. We plan to rewrite several lower-level components in Rust as demand increases to improve performance and reduce latency.
 
 
 ![OziArchitecture](./designs/mvp_current.png)
