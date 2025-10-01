@@ -1,6 +1,9 @@
 # Ozi
 
 
+
+https://app.ozi.world/
+
 [![Tip in Crypto](https://tip.md/badge.svg)](https://tip.md/ashnet16)
 
 **Ozi** is a real-time semantic search and analytics engine for decentralized social networks, starting with [Farcaster](https://www.farcaster.xyz).
